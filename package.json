@@ -7,6 +7,7 @@
   },
   "scripts": {
     "build": "vite build && cp -r public/* dist/ && cp manifest.json dist/",
-    "dev": "vite"
+    "dev": "vite",
+    "build-crx": "node build-crx.js"
   }
 }
