@@ -1,0 +1,33 @@
+name: Build Extension
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install dependencies
+      run: npm install
+      continue-on-error: true  # In case there are no dependencies
+
+    - name: Build zip
+      run: |
+        mkdir -p dist
+        zip -r dist/next-price-checker.zip popup.html popup.js manifest.json icons/
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: extension-zip
+        path: dist/next-price-checker.zip
