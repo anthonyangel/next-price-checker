@@ -1,0 +1,22 @@
+{
+    "compilerOptions": {
+        "target": "ES2020",
+        "lib": [
+            "DOM",
+            "ES2020"
+        ],
+        "module": "ESNext",
+        "moduleResolution": "Node",
+        "strict": true,
+        "esModuleInterop": true,
+        "skipLibCheck": true,
+        "typeRoots": [
+            "./node_modules/chrome-types"
+        ],
+        "outDir": "dist"
+    },
+    "include": [
+        "src",
+        "src/globals.d.ts"
+    ]
+}
