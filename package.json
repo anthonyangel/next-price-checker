@@ -1,0 +1,11 @@
+{
+  "devDependencies": {
+    "@types/chrome": "^0.0.326",
+    "chrome-types": "^0.1.353",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  },
+  "scripts": {
+    "build": "vite build && cp -r public/* dist/ && cp manifest.json dist/"
+  }
+}
