@@ -2,6 +2,7 @@ on:
   push:
 
 permissions:
+  issues: write
   contents: write
   pull-requests: write
 
