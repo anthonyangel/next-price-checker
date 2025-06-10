@@ -53,5 +53,5 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         zip -r ./extension.zip dist/
-        gh release upload ${{ steps.release.outputs.tag_name }} ./artifact/some-build-artifact.zip
+        gh release upload ${{ steps.release.outputs.tag_name }} ./extension.zip
 
