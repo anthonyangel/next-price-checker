@@ -6,7 +6,6 @@
     "permissions": [
       "activeTab",
       "scripting",
-      "tabs",
       "storage"
     ],
     "host_permissions": [
@@ -15,6 +14,9 @@
     ],
     "action": {
       "default_popup": "popup.html"
+    },
+    "background": {
+      "service_worker": "background.js",
+      "type": "module"
     }
   }
-  
