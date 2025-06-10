@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.2](https://github.com/anthonyangel/next-price-checker/compare/v1.0.1...v1.0.2) (2025-06-10)
+
+
+### Bug Fixes
+
+* beta for chrome store ([#10](https://github.com/anthonyangel/next-price-checker/issues/10)) ([0525f24](https://github.com/anthonyangel/next-price-checker/commit/0525f241b25bfe683ae43926d5e6f64a13b9e7b1))
+
 ## [1.0.1](https://github.com/anthonyangel/next-price-checker/compare/v1.0.0...v1.0.1) (2025-06-10)
 
 
