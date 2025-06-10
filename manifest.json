@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Next Price Comparator",
+  "name": "Next Price Comparator BETA",
   "version": "1.0.1",
-  "description": "Compare Next product prices UK vs Israel",
+  "description": "THIS EXTENSION IS FOR BETA TESTING Compare Next product prices UK vs Israel",
   "permissions": [
     "activeTab",
     "scripting",
