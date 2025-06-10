@@ -1,11 +1,25 @@
 {
   "devDependencies": {
+    "@eslint/js": "^9.28.0",
     "@types/chrome": "^0.0.326",
+    "@typescript-eslint/eslint-plugin": "^8.34.0",
+    "@typescript-eslint/parser": "^8.34.0",
     "chrome-types": "^0.1.353",
+    "eslint": "^9.28.0",
+    "eslint-config-prettier": "^10.1.5",
+    "prettier": "^3.5.3",
     "typescript": "^5.8.3",
+    "typescript-eslint": "^8.34.0",
     "vite": "^6.3.5"
   },
   "scripts": {
-    "build": "vite build && cp -r public/* dist/ && cp manifest.json dist/"
-  }
+    "build:contentScript": "vite build --config vite.config.contentScript.ts",
+    "build:default": "vite build --config vite.config.default.ts",
+    "build": "npm run build:contentScript && npm run build:default && mkdir -p dist && cp -r dist/contentScript/* dist/ && cp -r dist/default/* dist/ && cp -r public/* dist/ && cp manifest.json dist/",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint 'src/**/*.{ts,tsx}' --max-warnings=0",
+    "format": "prettier --write 'src/**/*.{ts,tsx,js,jsx,json,css,md}'",
+    "format:check": "prettier --check 'src/**/*.{ts,tsx,js,jsx,json,css,md}'"
+  },
+  "type": "module"
 }
