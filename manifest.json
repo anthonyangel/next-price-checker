@@ -1,22 +1,22 @@
 {
-    "manifest_version": 3,
-    "name": "Next Price Comparator",
-    "version": "0.0.0",
-    "description": "Compare Next product prices UK vs Israel",
-    "permissions": [
-      "activeTab",
-      "scripting",
-      "storage"
-    ],
-    "host_permissions": [
-      "https://www.next.co.uk/*",
-      "https://www.next.co.il/*"
-    ],
-    "action": {
-      "default_popup": "popup.html"
-    },
-    "background": {
-      "service_worker": "background.js",
-      "type": "module"
-    }
+  "manifest_version": 3,
+  "name": "Next Price Comparator",
+  "version": "1.0.0",
+  "description": "Compare Next product prices UK vs Israel",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://www.next.co.uk/*",
+    "https://www.next.co.il/*"
+  ],
+  "action": {
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
   }
+}
