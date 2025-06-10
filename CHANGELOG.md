@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/anthonyangel/next-price-checker/compare/v1.0.0...v1.0.1) (2025-06-10)
+
+
+### Bug Fixes
+
+* correct zip name ([#8](https://github.com/anthonyangel/next-price-checker/issues/8)) ([bd5290f](https://github.com/anthonyangel/next-price-checker/commit/bd5290fc0f0a46d3af7a4d281b12b5b07e936acc))
+
 ## 1.0.0 (2025-06-10)
 
 
