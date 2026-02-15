@@ -68,11 +68,7 @@ const writeLocks = new Map<string, Promise<void>>();
  * Merges into the existing cache entry so both regions coexist.
  * Serialized per key to prevent concurrent writes from losing data.
  */
-export async function setCachedPrice(
-  pid: string,
-  regionId: string,
-  price: number
-): Promise<void> {
+export async function setCachedPrice(pid: string, regionId: string, price: number): Promise<void> {
   const key = `${PRICE_CACHE_KEY_PREFIX}${pid}`;
   const prev = writeLocks.get(key) ?? Promise.resolve();
   const op = prev.then(async () => {
@@ -81,6 +77,9 @@ export async function setCachedPrice(
     await setToStorage(key, existing);
     log(`[storageUtils] Cache WRITE for ${pid.toUpperCase()}:${regionId} → ${price}`);
   });
-  writeLocks.set(key, op.catch(() => {}));
+  writeLocks.set(
+    key,
+    op.catch(() => {})
+  );
   await op;
 }

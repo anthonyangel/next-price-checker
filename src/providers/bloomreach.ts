@@ -55,10 +55,7 @@ interface QueryResult {
 }
 
 /** Core API query — returns price and whether the API responded. */
-async function queryApi(
-  pid: string,
-  config: BloomreachRegionConfig
-): Promise<QueryResult> {
+async function queryApi(pid: string, config: BloomreachRegionConfig): Promise<QueryResult> {
   const params = new URLSearchParams({
     account_id: config.accountId,
     auth_key: config.authKey,
@@ -96,9 +93,7 @@ async function queryApi(
  * Scrape Bloomreach API credentials from a retailer's homepage HTML.
  * The homepage typically contains the Bloomreach SDK config in a <script> block.
  */
-async function scrapeConfigFromHomepage(
-  siteUrl: string
-): Promise<BloomreachRegionConfig | null> {
+async function scrapeConfigFromHomepage(siteUrl: string): Promise<BloomreachRegionConfig | null> {
   try {
     const res = await fetch(siteUrl, { credentials: 'omit' });
     if (!res.ok) return null;

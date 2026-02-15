@@ -48,7 +48,9 @@ async function scanPage() {
 
     let products: Array<{ link: string; price: string }> = [];
 
-    let productContainer = document.querySelector(retailer.productContainerSelector) as HTMLElement | null;
+    let productContainer = document.querySelector(
+      retailer.productContainerSelector
+    ) as HTMLElement | null;
     if (!productContainer) {
       for (const sel of retailer.productContainerFallbackSelectors) {
         productContainer = document.querySelector(sel) as HTMLElement | null;
@@ -152,11 +154,10 @@ async function scanPage() {
       if (uncachedUrls.length > 0) {
         log(`[content_script] Bulk API fetch: ${uncachedUrls.length} products`);
         try {
-          const catalogResp: Record<string, { price: number }> =
-            await chrome.runtime.sendMessage({
-              action: 'getAlternateCatalogPrices',
-              urls: uncachedUrls,
-            });
+          const catalogResp: Record<string, { price: number }> = await chrome.runtime.sendMessage({
+            action: 'getAlternateCatalogPrices',
+            urls: uncachedUrls,
+          });
 
           for (const meta of productMeta) {
             if (!meta.altUrl) continue;
@@ -318,7 +319,9 @@ function applyFilter(hide: boolean) {
   const match = getRetailerAndRegion(location.hostname);
   if (!match) return;
 
-  let container = document.querySelector(match.retailer.productContainerSelector) as HTMLElement | null;
+  let container = document.querySelector(
+    match.retailer.productContainerSelector
+  ) as HTMLElement | null;
   if (!container) {
     for (const sel of match.retailer.productContainerFallbackSelectors) {
       container = document.querySelector(sel) as HTMLElement | null;

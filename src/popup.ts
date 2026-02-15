@@ -147,9 +147,8 @@ async function handleProductPageVerdict(
   const match = getRetailerAndRegion(currentUrl.hostname);
   const pid = match?.retailer.extractProductId(currentUrl) ?? null;
   const currentRegionId = match?.regionId ?? null;
-  const altRegionId = match && currentRegionId
-    ? match.retailer.getAlternateRegionId(currentRegionId)
-    : null;
+  const altRegionId =
+    match && currentRegionId ? match.retailer.getAlternateRegionId(currentRegionId) : null;
 
   // Cache the current page price
   if (pid && currentRegionId) {
@@ -164,7 +163,13 @@ async function handleProductPageVerdict(
     const cached = await getCachedPrice(pid, altRegionId);
     if (cached) {
       log(`Using cached price for ${pid}:${altRegionId}`);
-      renderPriceComparison(statusEl, product.price, { price: cached.price }, currentUrl.hostname, altUrl);
+      renderPriceComparison(
+        statusEl,
+        product.price,
+        { price: cached.price },
+        currentUrl.hostname,
+        altUrl
+      );
       return;
     }
   }
@@ -186,14 +191,17 @@ async function handleProductPageVerdict(
 }
 
 function renderCatalogSummary(statusEl: HTMLElement, summary: CatalogSummary) {
-  const { total, compared, cheaperHere, cheaperOnAlt, same, topSavingsAlt, topSavingsHere } = summary;
+  const { total, compared, cheaperHere, cheaperOnAlt, same, topSavingsAlt, topSavingsHere } =
+    summary;
 
   let html = `📦 <strong>${total} products</strong> scanned, ${compared} compared<br>`;
 
   if (compared > 0) {
     const parts: string[] = [];
-    if (cheaperHere > 0) parts.push(`<span style="color:#2e7d32">${cheaperHere} cheaper here</span>`);
-    if (cheaperOnAlt > 0) parts.push(`<span style="color:#e67e00">${cheaperOnAlt} cheaper on alt site</span>`);
+    if (cheaperHere > 0)
+      parts.push(`<span style="color:#2e7d32">${cheaperHere} cheaper here</span>`);
+    if (cheaperOnAlt > 0)
+      parts.push(`<span style="color:#e67e00">${cheaperOnAlt} cheaper on alt site</span>`);
     if (same > 0) parts.push(`${same} same price`);
     html += parts.join(' · ') + '<br>';
   }
@@ -201,31 +209,35 @@ function renderCatalogSummary(statusEl: HTMLElement, summary: CatalogSummary) {
   if (topSavingsHere.length > 0) {
     html += '<br><strong style="color:#2e7d32">Best deals on this site:</strong><br>';
     for (const deal of topSavingsHere) {
-      html += `<a href="${escapeHtml(deal.url)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none">`
-        + `${escapeHtml(deal.pid.toUpperCase())}</a>`
-        + ` — saving ${escapeHtml(deal.saving)} (${deal.percDiff.toFixed(1)}%)<br>`;
+      html +=
+        `<a href="${escapeHtml(deal.url)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none">` +
+        `${escapeHtml(deal.pid.toUpperCase())}</a>` +
+        ` — saving ${escapeHtml(deal.saving)} (${deal.percDiff.toFixed(1)}%)<br>`;
     }
   }
 
   if (topSavingsAlt.length > 0) {
     html += '<br><strong style="color:#e67e00">Cheaper on alternate site:</strong><br>';
     for (const deal of topSavingsAlt) {
-      html += `<a href="${escapeHtml(deal.url)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none">`
-        + `${escapeHtml(deal.pid.toUpperCase())}</a>`
-        + ` — save ${escapeHtml(deal.saving)} (${deal.percDiff.toFixed(1)}%)<br>`;
+      html +=
+        `<a href="${escapeHtml(deal.url)}" target="_blank" rel="noopener noreferrer" style="text-decoration:none">` +
+        `${escapeHtml(deal.pid.toUpperCase())}</a>` +
+        ` — save ${escapeHtml(deal.saving)} (${deal.percDiff.toFixed(1)}%)<br>`;
     }
   }
 
   if (cheaperHere > 0 && cheaperOnAlt === 0) {
-    html += '<br><span style="color:#2e7d32"><strong>All products are cheapest on this site.</strong></span>';
+    html +=
+      '<br><span style="color:#2e7d32"><strong>All products are cheapest on this site.</strong></span>';
   }
 
   // Filter checkbox — only useful when some items are more expensive here
   if (cheaperOnAlt > 0) {
-    html += '<br><label style="cursor:pointer;user-select:none">'
-      + '<input type="checkbox" id="npc-filter-cheaper"> '
-      + 'Only show products cheaper on this site'
-      + '</label>';
+    html +=
+      '<br><label style="cursor:pointer;user-select:none">' +
+      '<input type="checkbox" id="npc-filter-cheaper"> ' +
+      'Only show products cheaper on this site' +
+      '</label>';
   }
 
   statusEl.innerHTML = html;

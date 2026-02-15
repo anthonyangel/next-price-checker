@@ -88,9 +88,7 @@ export abstract class AbstractRetailer {
   getAlternateRegionId(currentRegionId: string): string | null {
     const ids = Object.keys(this.sites).filter((id) => id !== currentRegionId);
     if (ids.length !== 1) {
-      warn(
-        `[${this.id}] Expected exactly 1 alternate region, found ${ids.length}`
-      );
+      warn(`[${this.id}] Expected exactly 1 alternate region, found ${ids.length}`);
     }
     return ids[0] ?? null;
   }
@@ -106,10 +104,7 @@ export abstract class AbstractRetailer {
    * Default implementation calls lookupPrice individually;
    * retailers can override for bulk APIs.
    */
-  async lookupPrices(
-    pids: string[],
-    regionId: string
-  ): Promise<Record<string, number>> {
+  async lookupPrices(pids: string[], regionId: string): Promise<Record<string, number>> {
     const results: Record<string, number> = {};
     const settled = await Promise.allSettled(
       pids.map(async (pid) => {
