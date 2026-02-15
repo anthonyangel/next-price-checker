@@ -61,7 +61,7 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        zip -r ./extension.zip dist/
+        cd dist && zip -r ../extension.zip . && cd ..
         gh release upload ${{ steps.release.outputs.tag_name }} ./extension.zip
 
     - name: Publish to Chrome Web Store
