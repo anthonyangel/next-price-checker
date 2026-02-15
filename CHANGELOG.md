@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.2](https://github.com/anthonyangel/next-price-checker/compare/v1.1.1...v1.1.2) (2026-02-15)
+
+
+### Bug Fixes
+
+* zip dist contents at root level for CWS upload ([#37](https://github.com/anthonyangel/next-price-checker/issues/37)) ([10c2a2e](https://github.com/anthonyangel/next-price-checker/commit/10c2a2e3d17783095818510f00af66ad0cbcc58c))
+
 ## [1.1.1](https://github.com/anthonyangel/next-price-checker/compare/v1.1.0...v1.1.1) (2026-02-15)
 
 
