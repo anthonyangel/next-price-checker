@@ -2,8 +2,7 @@
  * Returns the main price selector for product pages.
  * @type {string}
  */
-export const priceSelector =
-  '#pdp-item-title > div > div.MuiBox-root.pdp-css-d4vbq4 > div.pdp-css-4bh121 > div > span';
+export const priceSelector = '#pdp-item-title .MuiTypography-h1 span';
 
 /**
  * Main selector for product container on listing pages.
