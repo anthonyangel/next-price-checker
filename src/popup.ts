@@ -42,7 +42,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, _sendResponse) => {
       productsFetched = true;
       log('Received npcProducts message:', msg.products);
       if (statusEl) {
-        statusEl.innerHTML = `📄 Scanning ${msg.products.length} products...`;
+        statusEl.innerHTML =
+          `📄 Found <strong>${msg.products.length} products</strong><br>` +
+          '<span style="color:#888">Fetching alternate prices...</span>';
       }
       return true;
     }
@@ -90,7 +92,7 @@ async function main() {
 }
 
 function isListingPage(url: URL): boolean {
-  const match = getRetailerAndRegion(url.hostname);
+  const match = getRetailerAndRegion(url);
   if (match) return match.retailer.isCatalogPage(url);
   return false;
 }
@@ -144,7 +146,7 @@ async function handleProductPageVerdict(
   const currentUrl = new URL(tab.url);
   const altUrl = getAlternateUrl(currentUrl);
 
-  const match = getRetailerAndRegion(currentUrl.hostname);
+  const match = getRetailerAndRegion(currentUrl);
   const pid = match?.retailer.extractProductId(currentUrl) ?? null;
   const currentRegionId = match?.regionId ?? null;
   const altRegionId =
@@ -154,22 +156,16 @@ async function handleProductPageVerdict(
   if (pid && currentRegionId) {
     const currentPrice = parsePrice(product.price);
     if (currentPrice !== null) {
-      setCachedPrice(pid, currentRegionId, currentPrice);
+      setCachedPrice(match!.retailer.id, pid, currentRegionId, currentPrice);
     }
   }
 
   // Check cache for alternate price
   if (pid && altRegionId) {
-    const cached = await getCachedPrice(pid, altRegionId);
+    const cached = await getCachedPrice(match!.retailer.id, pid, altRegionId);
     if (cached) {
       log(`Using cached price for ${pid}:${altRegionId}`);
-      renderPriceComparison(
-        statusEl,
-        product.price,
-        { price: cached.price },
-        currentUrl.hostname,
-        altUrl
-      );
+      renderPriceComparison(statusEl, product.price, { price: cached.price }, currentUrl, altUrl);
       return;
     }
   }
@@ -183,11 +179,11 @@ async function handleProductPageVerdict(
   if (resp?.price != null && pid && altRegionId) {
     const altPrice = typeof resp.price === 'number' ? resp.price : parseFloat(String(resp.price));
     if (!isNaN(altPrice)) {
-      setCachedPrice(pid, altRegionId, altPrice);
+      setCachedPrice(match!.retailer.id, pid, altRegionId, altPrice);
     }
   }
 
-  renderPriceComparison(statusEl, product.price, resp, currentUrl.hostname, altUrl);
+  renderPriceComparison(statusEl, product.price, resp, currentUrl, altUrl);
 }
 
 function renderCatalogSummary(statusEl: HTMLElement, summary: CatalogSummary) {
@@ -265,7 +261,7 @@ async function renderPriceComparison(
   statusEl: HTMLElement,
   currentPriceRaw: string,
   resp: { price?: string | number; error?: string; status?: number },
-  hostname: string,
+  currentUrl: URL,
   altUrl: string
 ) {
   if (resp.error) {
@@ -303,7 +299,7 @@ async function renderPriceComparison(
   const exchangeRate = exchangeData.rate;
   const usedFallback = exchangeData.fallback;
   const lastUpdated = exchangeData.timestamp;
-  const siteMeta = getSiteMeta(hostname);
+  const siteMeta = getSiteMeta(currentUrl);
   const lastFetchedStr = formatTimestamp(lastUpdated);
 
   const result = await getPriceComparisonVerdict({
@@ -311,7 +307,7 @@ async function renderPriceComparison(
     altPrice: resp.price!.toString(),
     isUK: siteMeta.isUK,
     rate: exchangeRate,
-    hostname,
+    url: currentUrl,
   });
 
   const approxInAlt = `≈ ${siteMeta.altCurrency}${(siteMeta.isUK ? priceCurrent * exchangeRate : priceCurrent / exchangeRate).toFixed(2)}`;

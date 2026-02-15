@@ -8,7 +8,7 @@
 import { getRetailerAndRegion } from './core/registry';
 
 export function getAlternateUrl(currentUrl: URL): string {
-  const match = getRetailerAndRegion(currentUrl.hostname);
+  const match = getRetailerAndRegion(currentUrl);
 
   if (match) {
     const { retailer, regionId } = match;

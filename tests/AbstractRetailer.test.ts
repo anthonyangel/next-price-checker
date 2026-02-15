@@ -28,12 +28,71 @@ class TestRetailer extends AbstractRetailer {
   lookupPrice = vi.fn<(pid: string, regionId: string) => Promise<number | null>>();
 }
 
+/** Retailer with shared hostname but different path prefixes (like Zara). */
+class SharedHostRetailer extends TestRetailer {
+  override readonly id = 'shared';
+  override readonly name = 'Shared';
+  override readonly sites: Record<string, RetailerSite> = {
+    uk: { hostnames: ['www.shared.com'], pathPrefix: '/uk', catalogPathPattern: /\/shop/ },
+    il: { hostnames: ['www.shared.com'], pathPrefix: '/il', catalogPathPattern: /\/shop/ },
+  };
+}
+
 describe('AbstractRetailer', () => {
   let retailer: TestRetailer;
 
   beforeEach(() => {
     retailer = new TestRetailer();
     vi.restoreAllMocks();
+  });
+
+  describe('getRegionForUrl', () => {
+    it('matches hostname for separate-hostname retailer', () => {
+      expect(retailer.getRegionForUrl(new URL('https://www.test.co.uk/'))).toBe('uk');
+      expect(retailer.getRegionForUrl(new URL('https://www.test.co.il/'))).toBe('il');
+    });
+
+    it('returns null for unknown hostname', () => {
+      expect(retailer.getRegionForUrl(new URL('https://www.unknown.com/'))).toBeNull();
+    });
+
+    it('matches hostname + pathPrefix for shared-hostname retailer', () => {
+      const shared = new SharedHostRetailer();
+      expect(shared.getRegionForUrl(new URL('https://www.shared.com/uk/shop'))).toBe('uk');
+      expect(shared.getRegionForUrl(new URL('https://www.shared.com/il/shop'))).toBe('il');
+    });
+
+    it('returns null when hostname matches but pathPrefix does not', () => {
+      const shared = new SharedHostRetailer();
+      expect(shared.getRegionForUrl(new URL('https://www.shared.com/us/shop'))).toBeNull();
+      expect(shared.getRegionForUrl(new URL('https://www.shared.com/'))).toBeNull();
+    });
+
+    it('ignores pathPrefix for sites without one', () => {
+      // TestRetailer has no pathPrefix — any path should match
+      expect(retailer.getRegionForUrl(new URL('https://www.test.co.uk/any/path'))).toBe('uk');
+    });
+  });
+
+  describe('isCatalogPage', () => {
+    it('returns true when catalog pattern matches', () => {
+      expect(retailer.isCatalogPage(new URL('https://www.test.co.uk/shop/items'))).toBe(true);
+    });
+
+    it('returns false when catalog pattern does not match', () => {
+      expect(retailer.isCatalogPage(new URL('https://www.test.co.uk/product/123'))).toBe(false);
+    });
+
+    it('returns false for unknown hostname', () => {
+      expect(retailer.isCatalogPage(new URL('https://www.unknown.com/shop'))).toBe(false);
+    });
+
+    it('works with shared-hostname retailer using pathPrefix', () => {
+      const shared = new SharedHostRetailer();
+      expect(shared.isCatalogPage(new URL('https://www.shared.com/uk/shop/items'))).toBe(true);
+      expect(shared.isCatalogPage(new URL('https://www.shared.com/il/shop/items'))).toBe(true);
+      expect(shared.isCatalogPage(new URL('https://www.shared.com/us/shop/items'))).toBe(false);
+    });
   });
 
   describe('getAlternateRegionId', () => {
@@ -74,6 +133,14 @@ describe('AbstractRetailer', () => {
       // Filtering 'xx' from ['uk', 'il'] leaves both → warns, returns first
       const result = retailer.getAlternateRegionId('xx');
       expect(result).toBeTruthy();
+    });
+  });
+
+  describe('catalogPriceFallbackSelectors', () => {
+    it('defaults to empty array in base class', () => {
+      // Base class provides no catalog price fallbacks.
+      // Retailers whose PDP priceSelector differs from catalog must override.
+      expect(retailer.catalogPriceFallbackSelectors).toEqual([]);
     });
   });
 
@@ -126,8 +193,20 @@ describe('AbstractRetailer', () => {
       retailer.lookupPrice.mockResolvedValue(10);
 
       await retailer.lookupPrices(['x', 'y'], 'il');
-      expect(retailer.lookupPrice).toHaveBeenCalledWith('x', 'il');
-      expect(retailer.lookupPrice).toHaveBeenCalledWith('y', 'il');
+      expect(retailer.lookupPrice).toHaveBeenCalledWith('x', 'il', undefined);
+      expect(retailer.lookupPrice).toHaveBeenCalledWith('y', 'il', undefined);
+    });
+
+    it('passes productUrl from pidToUrl mapping to each lookupPrice call', async () => {
+      retailer.lookupPrice.mockResolvedValue(10);
+
+      const pidToUrl = {
+        x: 'https://www.test.co.uk/product/x',
+        y: 'https://www.test.co.uk/product/y',
+      };
+      await retailer.lookupPrices(['x', 'y'], 'uk', pidToUrl);
+      expect(retailer.lookupPrice).toHaveBeenCalledWith('x', 'uk', 'https://www.test.co.uk/product/x');
+      expect(retailer.lookupPrice).toHaveBeenCalledWith('y', 'uk', 'https://www.test.co.uk/product/y');
     });
   });
 });

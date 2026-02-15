@@ -30,6 +30,13 @@ describe('parsePrice', () => {
     expect(parsePrice('abc')).toBeNull();
   });
 
+  it('returns null for N/A (regression: catalog fallback price)', () => {
+    // When the price selector doesn't match on catalog pages, product.price
+    // is 'N/A'. parsePrice must return null so the comparison logic shows
+    // the alternate price without a misleading "Same price" verdict.
+    expect(parsePrice('N/A')).toBeNull();
+  });
+
   it('parses zero', () => {
     expect(parsePrice('0')).toBe(0);
   });
@@ -54,7 +61,7 @@ describe('getPriceComparisonVerdict', () => {
       altPrice: '₪100.00',
       isUK: true,
       rate,
-      hostname: 'www.next.co.uk',
+      url: new URL('https://www.next.co.uk/'),
     });
     expect(result.diff).toBeGreaterThan(0);
     expect(result.verdict).toContain('Save');
@@ -69,7 +76,7 @@ describe('getPriceComparisonVerdict', () => {
       altPrice: '₪200.00',
       isUK: true,
       rate,
-      hostname: 'www.next.co.uk',
+      url: new URL('https://www.next.co.uk/'),
     });
     expect(result.diff).toBeLessThan(0);
     expect(result.verdict).toContain('Cheaper here');
@@ -83,7 +90,7 @@ describe('getPriceComparisonVerdict', () => {
       altPrice: '₪100.00',
       isUK: true,
       rate,
-      hostname: 'www.next.co.uk',
+      url: new URL('https://www.next.co.uk/'),
     });
     expect(Math.abs(result.diff)).toBeLessThanOrEqual(0.01);
     expect(result.verdict).toBe('Same price on both sites');
@@ -96,7 +103,7 @@ describe('getPriceComparisonVerdict', () => {
       altPrice: 'N/A',
       isUK: true,
       rate,
-      hostname: 'www.next.co.uk',
+      url: new URL('https://www.next.co.uk/'),
     });
     expect(result.verdict).toBe('');
     expect(result.diff).toBe(0);
@@ -110,7 +117,7 @@ describe('getPriceComparisonVerdict', () => {
       altPrice: '£50.00',
       isUK: false,
       rate,
-      hostname: 'www.next.co.il',
+      url: new URL('https://www.next.co.il/en/'),
     });
     expect(result.altPriceConverted).toBeCloseTo(230);
     expect(result.diff).toBeLessThan(0);
@@ -122,7 +129,7 @@ describe('getPriceComparisonVerdict', () => {
       altPrice: '₪100.00',
       isUK: true,
       rate,
-      hostname: 'www.next.co.uk',
+      url: new URL('https://www.next.co.uk/'),
     });
     expect(result.percDiff).toBeGreaterThan(0);
   });

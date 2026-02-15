@@ -11,7 +11,8 @@
   "host_permissions": [
     "https://www.next.co.uk/*",
     "https://www.next.co.il/*",
-    "https://core.dxpapi.com/*"
+    "https://core.dxpapi.com/*",
+    "https://www.zara.com/*"
   ],
   "action": {
     "default_popup": "popup.html"

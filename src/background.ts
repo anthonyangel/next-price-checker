@@ -17,7 +17,7 @@ log('[background.ts] loaded');
  */
 function resolveProduct(url: string) {
   const parsed = new URL(url);
-  const match = getRetailerAndRegion(parsed.hostname);
+  const match = getRetailerAndRegion(parsed);
   if (!match) return null;
   const { retailer, regionId } = match;
   const pid = retailer.extractProductId(parsed);
@@ -33,17 +33,44 @@ chrome.runtime.onMessage.addListener(
     if (msg.action === 'getAlternateCatalogPrices') {
       (async () => {
         try {
-          const { urls } = msg;
+          const { urls, catalogUrl } = msg;
           // Build pid→url mapping, capture retailer and region
           const pidToUrl: Record<string, string> = {};
           let regionId: string | null = null;
           let retailer: NonNullable<ReturnType<typeof resolveProduct>>['retailer'] | null = null;
-          for (const url of urls) {
-            const resolved = resolveProduct(url);
-            if (resolved) {
-              pidToUrl[resolved.pid] = url;
-              regionId = resolved.regionId;
-              retailer = resolved.retailer;
+
+          // If catalogUrl is provided (SPA retailers), resolve retailer/region
+          // from it and use the URLs array entries as PID keys directly.
+          if (catalogUrl) {
+            const parsed = new URL(catalogUrl);
+            const match = getRetailerAndRegion(parsed);
+            if (match) {
+              retailer = match.retailer;
+              regionId = match.regionId;
+              // For SPA retailers, urls are constructed from data-productid
+              // and contain PIDs that extractProductId can find — or we can
+              // just extract the PID from the path directly.
+              for (const url of urls) {
+                try {
+                  const pid = match.retailer.extractProductId(new URL(url));
+                  if (pid) pidToUrl[pid] = url;
+                } catch {
+                  // For SPA URLs like -p507084855.html, extractProductId works
+                  // because it matches \d{8,}. Use URL basename as fallback.
+                  const m = url.match(/-p(\d+)\.html/);
+                  if (m) pidToUrl[m[1]] = url;
+                }
+              }
+            }
+          } else {
+            // Standard approach: resolve retailer/region/pid from each URL
+            for (const url of urls) {
+              const resolved = resolveProduct(url);
+              if (resolved) {
+                pidToUrl[resolved.pid] = url;
+                regionId = resolved.regionId;
+                retailer = resolved.retailer;
+              }
             }
           }
 
@@ -54,7 +81,7 @@ chrome.runtime.onMessage.addListener(
 
           const pids = Object.keys(pidToUrl);
           log(`[background] Catalog lookup: ${pids.length} PIDs for region=${regionId}`);
-          const priceMap = await retailer.lookupPrices(pids, regionId);
+          const priceMap = await retailer.lookupPrices(pids, regionId, pidToUrl, catalogUrl);
 
           // Map back to URL→price
           const result: Record<string, { price: number }> = {};
@@ -89,7 +116,7 @@ chrome.runtime.onMessage.addListener(
           }
 
           const { retailer, regionId, pid } = resolved;
-          const price = await retailer.lookupPrice(pid, regionId);
+          const price = await retailer.lookupPrice(pid, regionId, url);
           (sendResponse as (r?: unknown) => void)({ price });
         } catch (err) {
           error('[background] Error in getAlternatePrice:', err);
