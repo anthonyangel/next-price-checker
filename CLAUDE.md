@@ -122,3 +122,10 @@ npx tsx scripts/create-retailer.ts "Example Store"
 ```
 
 This generates the boilerplate files. See `CONTRIBUTING.md` for the full checklist.
+
+## Git Workflow
+
+- **Never push directly to `main`.** All changes must go through a PR.
+- Use [conventional commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `chore:`, `style:`, `docs:`, `test:`, `refactor:`).
+- CI runs on every push to `main` and on PRs: typecheck, lint, format check, validate-retailers, tests, build.
+- Releases are automated via **release-please**. Merging a release-please PR bumps versions, updates the changelog, creates a GitHub release, and publishes to the Chrome Web Store.
