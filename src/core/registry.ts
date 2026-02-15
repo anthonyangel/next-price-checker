@@ -1,22 +1,23 @@
 /**
- * Retailer registry — looks up the correct retailer by hostname.
+ * Retailer registry — looks up the correct retailer by URL.
  */
 
 import type { AbstractRetailer } from './AbstractRetailer';
 import { NextRetailer } from '../retailers/next/NextRetailer';
+import { ZaraRetailer } from '../retailers/zara/ZaraRetailer';
 
 /** All registered retailers */
-const retailers: AbstractRetailer[] = [new NextRetailer()];
+const retailers: AbstractRetailer[] = [new NextRetailer(), new ZaraRetailer()];
 
 /**
- * Find the retailer and region for a given hostname.
+ * Find the retailer and region for a given URL.
  * Returns null if no retailer matches.
  */
 export function getRetailerAndRegion(
-  hostname: string
+  url: URL
 ): { retailer: AbstractRetailer; regionId: string } | null {
   for (const retailer of retailers) {
-    const regionId = retailer.getRegionForHostname(hostname);
+    const regionId = retailer.getRegionForUrl(url);
     if (regionId !== null) {
       return { retailer, regionId };
     }

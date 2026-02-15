@@ -28,15 +28,15 @@ export async function getPriceComparisonVerdict({
   altPrice,
   isUK,
   rate,
-  hostname,
+  url,
 }: {
   currentPrice: string;
   altPrice: string;
   isUK: boolean;
   rate: number;
-  hostname: string;
+  url: URL;
 }): Promise<PriceComparisonVerdict> {
-  const { altFlag, currentCurrency } = getSiteMeta(hostname);
+  const { altFlag, currentCurrency } = getSiteMeta(url);
   let verdict = '';
   let highlight = '';
   let diff = 0;

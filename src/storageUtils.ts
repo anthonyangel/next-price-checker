@@ -27,12 +27,14 @@ import { log } from './logger';
 
 /**
  * Gets a cached price for a product in a specific region, if it exists and is fresh.
+ * @param retailerId Retailer identifier (e.g. 'next', 'zara') to scope the cache key.
  */
 export async function getCachedPrice(
+  retailerId: string,
   pid: string,
   regionId: string
 ): Promise<RegionPriceEntry | null> {
-  const key = `${PRICE_CACHE_KEY_PREFIX}${pid}`;
+  const key = `${PRICE_CACHE_KEY_PREFIX}${retailerId}:${pid}`;
   const item = await getFromStorage<PriceCacheItem>(key);
 
   if (!item) return null;
@@ -67,9 +69,15 @@ const writeLocks = new Map<string, Promise<void>>();
  * Caches a price for a product in a specific region.
  * Merges into the existing cache entry so both regions coexist.
  * Serialized per key to prevent concurrent writes from losing data.
+ * @param retailerId Retailer identifier (e.g. 'next', 'zara') to scope the cache key.
  */
-export async function setCachedPrice(pid: string, regionId: string, price: number): Promise<void> {
-  const key = `${PRICE_CACHE_KEY_PREFIX}${pid}`;
+export async function setCachedPrice(
+  retailerId: string,
+  pid: string,
+  regionId: string,
+  price: number
+): Promise<void> {
+  const key = `${PRICE_CACHE_KEY_PREFIX}${retailerId}:${pid}`;
   const prev = writeLocks.get(key) ?? Promise.resolve();
   const op = prev.then(async () => {
     const existing = (await getFromStorage<PriceCacheItem>(key)) ?? {};

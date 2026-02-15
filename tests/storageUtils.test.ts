@@ -29,8 +29,9 @@ describe('setToStorage', () => {
 });
 
 describe('price cache', () => {
+  const retailerId = 'next';
   const pid = 'F29977';
-  const key = `${PRICE_CACHE_KEY_PREFIX}${pid}`;
+  const key = `${PRICE_CACHE_KEY_PREFIX}${retailerId}:${pid}`;
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -46,7 +47,7 @@ describe('price cache', () => {
       const now = 1000000;
       vi.setSystemTime(now);
 
-      await setCachedPrice(pid, 'uk', 26);
+      await setCachedPrice(retailerId, pid, 'uk', 26);
 
       const stored = await getFromStorage<PriceCacheItem>(key);
       expect(stored).toEqual({
@@ -58,10 +59,10 @@ describe('price cache', () => {
       const now = 1000000;
       vi.setSystemTime(now);
 
-      await setCachedPrice(pid, 'uk', 26);
+      await setCachedPrice(retailerId, pid, 'uk', 26);
 
       vi.setSystemTime(now + 100);
-      await setCachedPrice(pid, 'il', 90);
+      await setCachedPrice(retailerId, pid, 'il', 90);
 
       const stored = await getFromStorage<PriceCacheItem>(key);
       expect(stored).toEqual({
@@ -73,7 +74,7 @@ describe('price cache', () => {
 
   describe('getCachedPrice', () => {
     it('returns null if no cache exists', async () => {
-      const result = await getCachedPrice(pid, 'uk');
+      const result = await getCachedPrice(retailerId, pid, 'uk');
       expect(result).toBeNull();
     });
 
@@ -81,9 +82,9 @@ describe('price cache', () => {
       const now = 1000000;
       vi.setSystemTime(now);
 
-      await setCachedPrice(pid, 'uk', 26);
+      await setCachedPrice(retailerId, pid, 'uk', 26);
 
-      const result = await getCachedPrice(pid, 'il');
+      const result = await getCachedPrice(retailerId, pid, 'il');
       expect(result).toBeNull();
     });
 
@@ -91,12 +92,12 @@ describe('price cache', () => {
       const now = 1000000;
       vi.setSystemTime(now);
 
-      await setCachedPrice(pid, 'uk', 20);
+      await setCachedPrice(retailerId, pid, 'uk', 20);
 
       // Advance time but stay within TTL
       vi.setSystemTime(now + PRICE_CACHE_TTL_MS - 1);
 
-      const result = await getCachedPrice(pid, 'uk');
+      const result = await getCachedPrice(retailerId, pid, 'uk');
       expect(result).toEqual({ price: 20, timestamp: now });
     });
 
@@ -104,19 +105,19 @@ describe('price cache', () => {
       const now = 1000000;
       vi.setSystemTime(now);
 
-      await setCachedPrice(pid, 'uk', 26);
+      await setCachedPrice(retailerId, pid, 'uk', 26);
 
       // Cache IL later
       vi.setSystemTime(now + PRICE_CACHE_TTL_MS);
-      await setCachedPrice(pid, 'il', 90);
+      await setCachedPrice(retailerId, pid, 'il', 90);
 
       // Advance so UK is stale but IL is still fresh
       vi.setSystemTime(now + PRICE_CACHE_TTL_MS + 1);
 
-      const ukResult = await getCachedPrice(pid, 'uk');
+      const ukResult = await getCachedPrice(retailerId, pid, 'uk');
       expect(ukResult).toBeNull();
 
-      const ilResult = await getCachedPrice(pid, 'il');
+      const ilResult = await getCachedPrice(retailerId, pid, 'il');
       expect(ilResult).toEqual({ price: 90, timestamp: now + PRICE_CACHE_TTL_MS });
 
       // Verify UK was removed but IL remains
@@ -130,12 +131,12 @@ describe('price cache', () => {
       const now = 1000000;
       vi.setSystemTime(now);
 
-      await setCachedPrice(pid, 'uk', 26);
+      await setCachedPrice(retailerId, pid, 'uk', 26);
 
       // Advance time beyond TTL
       vi.setSystemTime(now + PRICE_CACHE_TTL_MS + 1);
 
-      const result = await getCachedPrice(pid, 'uk');
+      const result = await getCachedPrice(retailerId, pid, 'uk');
       expect(result).toBeNull();
 
       // Verify entire key was removed

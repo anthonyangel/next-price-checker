@@ -29,7 +29,7 @@ export function injectVerdict(
   verdictDiv.id = verdictId;
   verdictDiv.style.fontWeight = 'bold';
   verdictDiv.style.marginBottom = '4px';
-  verdictDiv.style.fontSize = '1.1em';
+  verdictDiv.style.fontSize = '0.85em';
 
   for (const line of content.lines) {
     if (line.type === 'br') {
@@ -53,7 +53,7 @@ export function injectVerdict(
   if (afterEl && afterEl.parentElement === parent) {
     parent.insertBefore(verdictDiv, afterEl.nextSibling);
   } else {
-    parent.insertBefore(verdictDiv, parent.firstChild);
+    parent.appendChild(verdictDiv);
   }
 }
 
@@ -62,7 +62,7 @@ export function injectVerdict(
  * @param parent The parent element
  * @param verdictId The id of the verdict element to remove
  */
-export function removeVerdictById(parent: HTMLElement, verdictId: string) {
-  const old = parent.querySelectorAll(`#${CSS.escape(verdictId)}`);
-  old.forEach((el) => el.remove());
+export function removeVerdictById(_parent: HTMLElement, verdictId: string) {
+  const old = document.getElementById(verdictId);
+  if (old) old.remove();
 }

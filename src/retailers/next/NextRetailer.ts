@@ -37,6 +37,17 @@ export class NextRetailer extends AbstractRetailer {
     '.plp-product-grid-wrapper > div',
   ];
 
+  /**
+   * Catalog page price fallbacks — the PDP priceSelector doesn't match
+   * product cards on listing pages. Try common price selectors first,
+   * then fall back to any <span> (which typically contains the price text).
+   */
+  override readonly catalogPriceFallbackSelectors = [
+    '.product-price',
+    '[data-testid="price"]',
+    'span',
+  ];
+
   /** Bloomreach Discovery API credentials per region. */
   private readonly bloomreachConfigs: Record<string, BloomreachRegionConfig> = {
     uk: {

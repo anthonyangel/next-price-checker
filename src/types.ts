@@ -44,6 +44,9 @@ export interface AlternatePriceMessage {
 export interface AlternateCatalogMessage {
   action: 'getAlternateCatalogPrices';
   urls: string[];
+  /** Alternate catalog page URL — used by SPA retailers (Zara) to fetch
+   *  all prices in one request instead of individual product pages. */
+  catalogUrl?: string;
 }
 
 /**

@@ -1,6 +1,6 @@
 # Next Price Checker
 
-Chrome MV3 extension that compares product prices between UK and Israel versions of retail websites. Currently supports **Next** (next.co.uk / next.co.il).
+Chrome MV3 extension that compares product prices between UK and Israel versions of retail websites. Supports **Next** (next.co.uk / next.co.il) and **Zara** (zara.com/uk / zara.com/il).
 
 ## Tech Stack
 
@@ -36,6 +36,11 @@ src/
   retailers/
     next/
       NextRetailer.ts   # Next-specific: sites, selectors, URL transform
+    zara/
+      ZaraRetailer.ts   # Zara-specific: shared hostname, path-prefix regions
+  providers/
+    bloomreach.ts       # Bloomreach Discovery API (used by Next)
+    zara.ts             # Zara HTML scraping price lookup
   background.ts         # Service worker — fetches alternate prices
   contentScript.ts      # Injected into retailer pages — extracts prices, injects verdicts
   popup.ts              # Extension popup — shows price comparison
@@ -48,7 +53,7 @@ src/
 
 - **Regions** are global (`src/core/regions.ts`). A region has an ID, currency, flag, and symbol. Retailers reference region IDs — they never duplicate region data.
 - **Retailers** extend `AbstractRetailer` and define their sites (hostnames, path prefixes, catalog patterns), CSS selectors, and URL transformation logic.
-- **Registry** (`src/core/registry.ts`) maps hostnames → retailers. Adding a new retailer means creating a class and registering it here.
+- **Registry** (`src/core/registry.ts`) maps URLs → retailers. `getRetailerAndRegion(url: URL)` finds the retailer and region for a given URL. Retailers with unique hostnames (Next) match by hostname alone; retailers with shared hostnames (Zara) use `pathPrefix` to disambiguate.
 
 ## Adding a New Retailer
 
@@ -111,7 +116,7 @@ If your retailer operates in a region not yet in `src/core/regions.ts`, add it t
 
 Create `tests/{Name}Retailer.test.ts` covering:
 
-- `getRegionForHostname` — each hostname returns correct region, unknown returns null
+- `getRegionForUrl` — each URL returns correct region, unknown returns null
 - `isCatalogPage` — catalog vs product URLs
 - `transformUrl` — both directions (UK→IL, IL→UK), round-trip, query/hash preservation
 

@@ -3,17 +3,32 @@ import { NextRetailer } from '../src/retailers/next/NextRetailer';
 describe('NextRetailer', () => {
   const next = new NextRetailer();
 
-  describe('getRegionForHostname', () => {
+  describe('getRegionForUrl', () => {
     it('returns uk for next.co.uk', () => {
-      expect(next.getRegionForHostname('www.next.co.uk')).toBe('uk');
+      expect(next.getRegionForUrl(new URL('https://www.next.co.uk/'))).toBe('uk');
     });
 
     it('returns il for next.co.il', () => {
-      expect(next.getRegionForHostname('www.next.co.il')).toBe('il');
+      expect(next.getRegionForUrl(new URL('https://www.next.co.il/'))).toBe('il');
     });
 
     it('returns null for unknown hostname', () => {
-      expect(next.getRegionForHostname('www.zara.com')).toBeNull();
+      expect(next.getRegionForUrl(new URL('https://www.zara.com/'))).toBeNull();
+    });
+
+    it('matches uk regardless of path (no pathPrefix for uk)', () => {
+      expect(next.getRegionForUrl(new URL('https://www.next.co.uk/shop/women'))).toBe('uk');
+      expect(next.getRegionForUrl(new URL('https://www.next.co.uk/style/abc/123'))).toBe('uk');
+    });
+
+    it('matches il with /en path prefix', () => {
+      expect(next.getRegionForUrl(new URL('https://www.next.co.il/en/shop/women'))).toBe('il');
+    });
+
+    it('matches il without /en prefix (unique hostname, pathPrefix not required)', () => {
+      // next.co.il has a unique hostname (not shared with UK), so pathPrefix
+      // is only used for URL transformation, not for region detection
+      expect(next.getRegionForUrl(new URL('https://www.next.co.il/style/abc/123'))).toBe('il');
     });
   });
 
@@ -114,6 +129,31 @@ describe('NextRetailer', () => {
     it('has product container selectors', () => {
       expect(next.productContainerSelector).toBeTruthy();
       expect(next.productContainerFallbackSelectors.length).toBeGreaterThan(0);
+    });
+
+    it('has catalog price fallback selectors (regression: PDP selector differs from catalog)', () => {
+      // The priceSelector targets PDP elements (#pdp-item-title) which don't exist
+      // on catalog pages. catalogPriceFallbackSelectors must be defined so the
+      // content script can still extract prices from catalog product cards.
+      expect(next.catalogPriceFallbackSelectors.length).toBeGreaterThan(0);
+      expect(next.catalogPriceFallbackSelectors).toContain('span');
+    });
+  });
+
+  describe('SPA extraction (regression)', () => {
+    it('extractProductIdFromElement returns null (not an SPA retailer)', () => {
+      // Next uses standard <a href> links, not data-productid attributes.
+      // This ensures the content script won't use DOM fallback for Next,
+      // which would incorrectly trigger catalogUrl-based fetching.
+      const el = {
+        getAttribute: () => null,
+        querySelector: () => null,
+      } as unknown as Element;
+      expect(next.extractProductIdFromElement(el)).toBeNull();
+    });
+
+    it('constructProductUrl returns null (not needed for Next)', () => {
+      expect(next.constructProductUrl('f30002', 'uk')).toBeNull();
     });
   });
 });

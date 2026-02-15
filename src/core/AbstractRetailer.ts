@@ -46,17 +46,40 @@ export abstract class AbstractRetailer {
   abstract readonly productContainerFallbackSelectors: string[];
 
   /**
+   * Fallback CSS selectors for price extraction on catalog/listing pages.
+   * Tried in order when priceSelector doesn't match a product card element.
+   * Override in subclasses where the PDP price selector differs from catalog.
+   */
+  readonly catalogPriceFallbackSelectors: string[] = [];
+
+  /**
    * Transform a URL from one region to another.
    * e.g. next.co.uk/style/123 → next.co.il/en/style/123
    */
   abstract transformUrl(url: URL, fromRegion: string, toRegion: string): string;
 
   /**
-   * Determine which region a hostname belongs to, or null if not this retailer.
+   * Determine which region a URL belongs to, or null if not this retailer.
+   * Matches by hostname first. When multiple regions share a hostname,
+   * uses pathPrefix to disambiguate (e.g. Zara UK /uk/ vs IL /il/).
+   * When a hostname uniquely identifies a region, pathPrefix is not required.
    */
-  getRegionForHostname(hostname: string): string | null {
+  getRegionForUrl(url: URL): string | null {
+    // Collect all regions whose hostname matches
+    const candidates: [string, RetailerSite][] = [];
     for (const [regionId, site] of Object.entries(this.sites)) {
-      if (site.hostnames.some((h) => hostname === h || hostname.endsWith(h))) {
+      const hostnameMatch = site.hostnames.some(
+        (h) => url.hostname === h || url.hostname.endsWith(h)
+      );
+      if (hostnameMatch) candidates.push([regionId, site]);
+    }
+
+    if (candidates.length === 0) return null;
+    if (candidates.length === 1) return candidates[0][0];
+
+    // Multiple regions share this hostname — use pathPrefix to disambiguate
+    for (const [regionId, site] of candidates) {
+      if (site.pathPrefix && url.pathname.startsWith(site.pathPrefix)) {
         return regionId;
       }
     }
@@ -67,7 +90,7 @@ export abstract class AbstractRetailer {
    * Check if a URL is a catalog/listing page for this retailer.
    */
   isCatalogPage(url: URL): boolean {
-    const regionId = this.getRegionForHostname(url.hostname);
+    const regionId = this.getRegionForUrl(url);
     if (!regionId) return false;
     return this.sites[regionId].catalogPathPattern.test(url.pathname);
   }
@@ -78,6 +101,24 @@ export abstract class AbstractRetailer {
    * Subclasses override this if they support direct API lookups.
    */
   extractProductId(_url: URL): string | null {
+    return null;
+  }
+
+  /**
+   * Extract a product ID from a catalog page DOM element (e.g., data attributes).
+   * Used as fallback when product cards don't have `<a href>` (SPA retailers).
+   * Returns null by default; override in subclasses like Zara.
+   */
+  extractProductIdFromElement(_element: Element): string | null {
+    return null;
+  }
+
+  /**
+   * Construct a product page URL from a PID and region ID.
+   * Used for SPA retailers where catalog DOM elements don't have hrefs.
+   * Returns null by default; override in subclasses that need it.
+   */
+  constructProductUrl(_pid: string, _regionId: string): string | null {
     return null;
   }
 
@@ -96,19 +137,35 @@ export abstract class AbstractRetailer {
   /**
    * Look up a product's price by PID and region via the retailer's API.
    * Each retailer implements this with its own provider (e.g. Bloomreach).
+   *
+   * @param pid Product identifier
+   * @param regionId Target region (e.g. 'uk', 'il')
+   * @param productUrl Optional full product URL — used by HTML-scraping
+   *   providers that need the real URL (with slug) instead of constructing one.
    */
-  abstract lookupPrice(pid: string, regionId: string): Promise<number | null>;
+  abstract lookupPrice(pid: string, regionId: string, productUrl?: string): Promise<number | null>;
 
   /**
    * Look up prices for multiple PIDs in parallel.
    * Default implementation calls lookupPrice individually;
    * retailers can override for bulk APIs.
+   *
+   * @param pidToUrl Optional mapping of PID → full product URL, passed
+   *   through to lookupPrice for HTML-scraping providers.
+   * @param catalogUrl Optional alternate catalog page URL — SPA retailers
+   *   (like Zara) can fetch this once to get all prices instead of hitting
+   *   individual product pages.
    */
-  async lookupPrices(pids: string[], regionId: string): Promise<Record<string, number>> {
+  async lookupPrices(
+    pids: string[],
+    regionId: string,
+    pidToUrl?: Record<string, string>,
+    _catalogUrl?: string
+  ): Promise<Record<string, number>> {
     const results: Record<string, number> = {};
     const settled = await Promise.allSettled(
       pids.map(async (pid) => {
-        const price = await this.lookupPrice(pid, regionId);
+        const price = await this.lookupPrice(pid, regionId, pidToUrl?.[pid]);
         if (price !== null) results[pid] = price;
       })
     );
