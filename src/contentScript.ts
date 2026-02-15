@@ -184,7 +184,11 @@ async function scanPage() {
             if (productDiv) {
               // For SPA retailers, constructed product URLs don't work — use catalog URL
               const buyLink = usedDomFallback && altCatalogUrl ? altCatalogUrl : altUrl;
-              const cachedPriceEl = findPriceEl(productDiv, retailer.priceSelector, retailer.catalogPriceFallbackSelectors);
+              const cachedPriceEl = findPriceEl(
+                productDiv,
+                retailer.priceSelector,
+                retailer.catalogPriceFallbackSelectors
+              );
               renderAndInjectVerdict(
                 product,
                 compareId,
@@ -207,8 +211,15 @@ async function scanPage() {
         if (!meta.altUrl || !uncachedUrls.includes(meta.altUrl)) continue;
         const productDiv = container.children[meta.idx] as HTMLElement | undefined;
         if (!productDiv) continue;
-        const loadPriceEl = findPriceEl(productDiv, retailer.priceSelector, retailer.catalogPriceFallbackSelectors);
-        const loadParent = loadPriceEl?.parentElement instanceof HTMLElement ? loadPriceEl.parentElement : productDiv;
+        const loadPriceEl = findPriceEl(
+          productDiv,
+          retailer.priceSelector,
+          retailer.catalogPriceFallbackSelectors
+        );
+        const loadParent =
+          loadPriceEl?.parentElement instanceof HTMLElement
+            ? loadPriceEl.parentElement
+            : productDiv;
         const loadingContent: VerdictContent = {
           lines: [
             {
@@ -244,7 +255,11 @@ async function scanPage() {
             // For SPA retailers (usedDomFallback), constructed product URLs
             // don't work — link to the alternate catalog page instead.
             const buyLink = usedDomFallback && altCatalogUrl ? altCatalogUrl : meta.altUrl;
-            const respPriceEl = findPriceEl(productDiv, retailer.priceSelector, retailer.catalogPriceFallbackSelectors);
+            const respPriceEl = findPriceEl(
+              productDiv,
+              retailer.priceSelector,
+              retailer.catalogPriceFallbackSelectors
+            );
 
             if (resp?.price != null) {
               // Cache alternate price and render

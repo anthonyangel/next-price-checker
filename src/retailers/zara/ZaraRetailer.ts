@@ -129,7 +129,9 @@ export class ZaraRetailer extends AbstractRetailer {
 
       // Fall back to individual product page lookups for unmatched PIDs
       if (unmatchedPids.length > 0) {
-        log(`[zara] Falling back to individual lookups for ${unmatchedPids.length} unmatched PIDs: ${unmatchedPids.join(', ')}`);
+        log(
+          `[zara] Falling back to individual lookups for ${unmatchedPids.length} unmatched PIDs: ${unmatchedPids.join(', ')}`
+        );
         const fallback = await super.lookupPrices(unmatchedPids, regionId, pidToUrl);
         Object.assign(results, fallback);
       }
