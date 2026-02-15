@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/anthonyangel/next-price-checker/compare/v1.1.0...v1.1.1) (2026-02-15)
+
+
+### Bug Fixes
+
+* add git workflow rules to CLAUDE.md — require PRs, no direct pushes to main ([deeeb7d](https://github.com/anthonyangel/next-price-checker/commit/deeeb7d819549bc8d4fa638f9c4fcff0e7a30016))
+
 ## [1.1.0](https://github.com/anthonyangel/next-price-checker/compare/v1.0.2...v1.1.0) (2026-02-15)
 
 
