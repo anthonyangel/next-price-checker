@@ -38,7 +38,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, _sendResponse) => {
     const statusEl = document.getElementById('status');
     // Listing page logic
     if (msg.products && msg.products.length > 1) {
-      if (productsFetched) return true;
+      if (productsFetched) return false;
       productsFetched = true;
       log('Received npcProducts message:', msg.products);
       if (statusEl) {
@@ -46,26 +46,26 @@ chrome.runtime.onMessage.addListener((msg, _sender, _sendResponse) => {
           `📄 Found <strong>${msg.products.length} products</strong><br>` +
           '<span style="color:#888">Fetching alternate prices...</span>';
       }
-      return true;
+      return false;
     }
     // Product page logic
     if (msg.products && msg.products.length === 1 && !productPageHandled) {
       productPageHandled = true;
       handleProductPageVerdict(msg.products[0], statusEl);
-      return true;
+      return false;
     }
     // No products found
     if (statusEl && (!msg.products || msg.products.length === 0)) {
       statusEl.textContent = 'No products found.';
       warn('No products found in npcProducts message:', msg.products);
     }
-    return true;
+    return false;
   }
 
   if (msg.action === 'npcCatalogSummary' && msg.summary) {
     const statusEl = document.getElementById('status');
     if (statusEl) renderCatalogSummary(statusEl, msg.summary);
-    return true;
+    return false;
   }
 });
 

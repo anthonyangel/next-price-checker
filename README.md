@@ -8,6 +8,7 @@ A Chrome extension that compares product prices between UK and Israel versions o
 |---|---|---|---|
 | **Next** | next.co.uk | next.co.il | Bloomreach Discovery API |
 | **Zara** | zara.com/uk | zara.com/il | HTML scraping (product pages) |
+| **H&M** | www2.hm.com/en_gb | www2.hm.com/hw_il | `__NEXT_DATA__` JSON parsing |
 
 ## Features
 - Compares prices between UK and Israel for each product on supported retailers.

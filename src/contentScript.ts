@@ -52,7 +52,10 @@ let filterActive = false;
  * and fetches alternate prices via the Bloomreach API (through background).
  */
 async function scanPage() {
-  if (scanInProgress) return;
+  if (scanInProgress) {
+    log('[content_script] scanPage already in progress, skipping');
+    return;
+  }
   scanInProgress = true;
   try {
     const pageUrl = new URL(location.href);
@@ -75,7 +78,9 @@ async function scanPage() {
       }
     }
 
-    if (productContainer) {
+    const isCatalog = retailer.isCatalogPage(pageUrl);
+
+    if (productContainer && isCatalog) {
       const productDivs = Array.from(productContainer.children);
       products = productDivs.map((div) => {
         const anchor = div.querySelector('a[href]') as HTMLAnchorElement | null;
@@ -91,15 +96,29 @@ async function scanPage() {
         return { link, price };
       });
     } else {
+      log(`[content_script] No product container found, trying single-product extraction`);
       const priceEl = document.querySelector(retailer.priceSelector) as HTMLElement | null;
       if (priceEl && priceEl.textContent) {
+        log(`[content_script] Found price via CSS selector: ${priceEl.textContent.trim()}`);
         products = [{ link: window.location.href, price: priceEl.textContent.trim() }];
       } else {
-        products = [];
+        // Fallback: try structured data extraction (e.g. __NEXT_DATA__ for Next.js retailers)
+        log(
+          `[content_script] CSS selector "${retailer.priceSelector}" missed, trying extractPriceFromPage`
+        );
+        const fallbackPrice = retailer.extractPriceFromPage(pageUrl);
+        if (fallbackPrice) {
+          log(`[content_script] extractPriceFromPage returned: ${fallbackPrice}`);
+          products = [{ link: window.location.href, price: fallbackPrice }];
+        } else {
+          log(`[content_script] extractPriceFromPage returned null — no price found`);
+          products = [];
+        }
       }
     }
 
     win._nextPriceCheckerProducts = products;
+    log(`[content_script] Sending npcProducts: ${products.length} product(s)`);
     chrome.runtime.sendMessage({ action: 'npcProducts', products });
 
     // --- Catalog page: bulk fetch all alternate prices in one message ---
@@ -124,8 +143,9 @@ async function scanPage() {
 
       // Build metadata for each product, check cache
       const uncachedUrls: string[] = [];
-      // Track whether any product used DOM fallback extraction (SPA retailers)
-      let usedDomFallback = false;
+      // Whether constructed product URLs are usable for buy-links and individual lookups.
+      // When false (e.g. Zara SPA), we use the catalog URL instead.
+      const urlsAreValid = retailer.constructedUrlsAreValid;
       // Track resolved alt prices for summary: pid → altPrice (numeric)
       const resolvedAltPrices: Map<string, number> = new Map();
       const productMeta: Array<{
@@ -155,7 +175,7 @@ async function scanPage() {
             pid = retailer.extractProductIdFromElement(productDiv);
             if (pid && altRegionId) {
               altUrl = retailer.constructProductUrl(pid, altRegionId);
-              usedDomFallback = true;
+              // tracked via retailer.constructedUrlsAreValid
             }
           }
         }
@@ -182,8 +202,8 @@ async function scanPage() {
             resolvedAltPrices.set(pid, cached.price);
             const productDiv = container.children[i] as HTMLElement | undefined;
             if (productDiv) {
-              // For SPA retailers, constructed product URLs don't work — use catalog URL
-              const buyLink = usedDomFallback && altCatalogUrl ? altCatalogUrl : altUrl;
+              // When constructed URLs aren't valid, link to catalog page instead
+              const buyLink = !urlsAreValid && altCatalogUrl ? altCatalogUrl : altUrl;
               const cachedPriceEl = findPriceEl(
                 productDiv,
                 retailer.priceSelector,
@@ -240,9 +260,9 @@ async function scanPage() {
           const catalogResp: Record<string, { price: number }> = await chrome.runtime.sendMessage({
             action: 'getAlternateCatalogPrices',
             urls: uncachedUrls,
-            // Only send catalogUrl for SPA retailers (DOM fallback was used).
-            // Non-SPA retailers (Next) use individual API lookups.
-            catalogUrl: usedDomFallback ? altCatalogUrl : undefined,
+            // Send catalogUrl when constructed URLs aren't valid product pages
+            // (SPA retailers like Zara). Non-SPA retailers use individual lookups.
+            catalogUrl: !urlsAreValid ? altCatalogUrl : undefined,
           });
 
           for (const meta of productMeta) {
@@ -252,9 +272,9 @@ async function scanPage() {
             if (!productDiv) continue;
 
             // For buy links: use the real alternate URL when available.
-            // For SPA retailers (usedDomFallback), constructed product URLs
-            // don't work — link to the alternate catalog page instead.
-            const buyLink = usedDomFallback && altCatalogUrl ? altCatalogUrl : meta.altUrl;
+            // For SPA retailers where constructed URLs don't work,
+            // link to the alternate catalog page instead.
+            const buyLink = !urlsAreValid && altCatalogUrl ? altCatalogUrl : meta.altUrl;
             const respPriceEl = findPriceEl(
               productDiv,
               retailer.priceSelector,
@@ -445,12 +465,12 @@ chrome.runtime.onMessage.addListener(
       log('[content_script] Received scanListingPage message');
       scanPage();
       sendResponse();
-      return true;
+      return false;
     }
     if (msg.action === 'npcFilterCatalog') {
       applyFilter(!!msg.hide);
       sendResponse();
-      return true;
+      return false;
     }
   }
 );

@@ -3,7 +3,7 @@
  * Each retailer defines its sites, selectors, and URL transformation logic.
  */
 
-import { warn } from '../logger';
+import { log, warn } from '../logger';
 
 export interface RetailerSite {
   hostnames: string[];
@@ -51,6 +51,14 @@ export abstract class AbstractRetailer {
    * Override in subclasses where the PDP price selector differs from catalog.
    */
   readonly catalogPriceFallbackSelectors: string[] = [];
+
+  /**
+   * Whether URLs built by constructProductUrl are navigable product pages.
+   * True by default. Set to false for SPA retailers (like Zara) where
+   * constructed URLs don't resolve — the content script will link to the
+   * alternate catalog page instead.
+   */
+  readonly constructedUrlsAreValid: boolean = true;
 
   /**
    * Transform a URL from one region to another.
@@ -123,6 +131,20 @@ export abstract class AbstractRetailer {
   }
 
   /**
+   * Extract the current page's price from structured data in the DOM.
+   * Called by the content script as a fallback when CSS selectors don't match.
+   *
+   * Override in subclasses that have reliable structured data sources
+   * (e.g. __NEXT_DATA__ for Next.js retailers). Only called in the content
+   * script context where `document` is available.
+   *
+   * @returns Price text string (e.g. "19.99"), or null to fall back to CSS.
+   */
+  extractPriceFromPage(_url: URL): string | null {
+    return null;
+  }
+
+  /**
    * Get the alternate region ID for a given region.
    * Warns if the retailer has more than 2 regions (not yet supported).
    */
@@ -174,6 +196,49 @@ export abstract class AbstractRetailer {
         warn('[AbstractRetailer] lookupPrices rejected:', r.reason);
       }
     }
+    return results;
+  }
+
+  /**
+   * Catalog-first bulk lookup: fetch a catalog page for prices, then
+   * fall back to individual lookups for any unmatched PIDs.
+   *
+   * Shared by retailers whose catalog pages embed all product prices
+   * (H&M via __NEXT_DATA__, Zara via HTML scraping). Subclasses call
+   * this from their lookupPrices override, passing their catalog fetcher.
+   */
+  protected async lookupPricesWithCatalog(
+    pids: string[],
+    regionId: string,
+    catalogUrl: string,
+    fetchCatalogPrices: (url: string) => Promise<Record<string, number>>,
+    pidToUrl?: Record<string, string>
+  ): Promise<Record<string, number>> {
+    log(`[${this.id}] Fetching alternate catalog page: ${catalogUrl}`);
+    const catalogPrices = await fetchCatalogPrices(catalogUrl);
+
+    const results: Record<string, number> = {};
+    const unmatchedPids: string[] = [];
+    for (const pid of pids) {
+      if (catalogPrices[pid] !== undefined) {
+        results[pid] = catalogPrices[pid];
+      } else {
+        unmatchedPids.push(pid);
+      }
+    }
+
+    log(
+      `[${this.id}] Catalog matched ${Object.keys(results).length}/${pids.length} requested PIDs`
+    );
+
+    if (unmatchedPids.length > 0) {
+      log(
+        `[${this.id}] Falling back to individual lookups for ${unmatchedPids.length} unmatched PIDs`
+      );
+      const fallback = await this.lookupPrices(unmatchedPids, regionId, pidToUrl);
+      Object.assign(results, fallback);
+    }
+
     return results;
   }
 }
