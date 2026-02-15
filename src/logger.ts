@@ -1,7 +1,7 @@
 // Logger utility for Next Price Checker
 // -------------------------------------
 
-const DEBUG = false; // Set to true for verbose logging
+const DEBUG = true; // Set to true for verbose logging
 
 export function log(...args: unknown[]) {
   if (DEBUG) console.log('[NPC]', ...args);

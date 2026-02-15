@@ -8,7 +8,9 @@ import type { PriceComparisonVerdict } from './types';
  */
 export function parsePrice(raw: string | null): number | null {
   if (!raw) return null;
-  const parsed = parseFloat(raw.replace(/[^\d.]/g, ''));
+  // Handle price ranges like "₪45.00 - ₪60.00" by taking the first price
+  const firstPrice = raw.split(/\s*[-–]\s*/)[0];
+  const parsed = parseFloat(firstPrice.replace(/[^\d.]/g, ''));
   return isNaN(parsed) ? null : parsed;
 }
 
@@ -18,6 +20,7 @@ export function parsePrice(raw: string | null): number | null {
  * @param altPrice The alternate site price (string)
  * @param isUK Whether the current site is UK
  * @param rate The GBP/ILS exchange rate
+ * @param hostname The current site hostname (used for metadata lookup)
  * @returns PriceComparisonVerdict object
  */
 export async function getPriceComparisonVerdict({
@@ -25,48 +28,38 @@ export async function getPriceComparisonVerdict({
   altPrice,
   isUK,
   rate,
+  hostname,
 }: {
   currentPrice: string;
   altPrice: string;
   isUK: boolean;
   rate: number;
+  hostname: string;
 }): Promise<PriceComparisonVerdict> {
-  const { altFlag, currentCurrency } = getSiteMeta(isUK ? 'www.next.co.uk' : 'www.next.co.il');
+  const { altFlag, currentCurrency } = getSiteMeta(hostname);
   let verdict = '';
   let highlight = '';
-  let altPriceDisplay = '';
   let diff = 0;
   let percDiff = 0;
   let altPriceConverted = 0;
-  const currentPriceNum = parseFloat(currentPrice.replace(/[^\d.]/g, ''));
-  const altPriceNum = parseFloat(altPrice.replace(/[^\d.]/g, ''));
-  if (!isNaN(currentPriceNum) && !isNaN(altPriceNum)) {
-    if (isUK) {
-      altPriceConverted = altPriceNum / rate;
-      altPriceDisplay = `${altFlag} ${altPrice}`;
-      diff = currentPriceNum - altPriceConverted;
-    } else {
-      altPriceConverted = altPriceNum * rate;
-      altPriceDisplay = `${altFlag} ${altPrice}`;
-      diff = currentPriceNum - altPriceConverted;
-    }
+  const currentPriceNum = parsePrice(currentPrice);
+  const altPriceNum = parsePrice(altPrice);
+  if (currentPriceNum !== null && altPriceNum !== null) {
+    altPriceConverted = isUK ? altPriceNum / rate : altPriceNum * rate;
+    diff = currentPriceNum - altPriceConverted;
     percDiff = (Math.abs(diff) / ((currentPriceNum + altPriceConverted) / 2)) * 100;
     if (Math.abs(diff) > 0.01) {
       if (diff > 0) {
-        verdict = `${altFlag} more expensive by ${currentCurrency}${Math.abs(diff).toFixed(2)} (${percDiff.toFixed(1)}%)`;
-        highlight = 'color: green;';
+        verdict = `Save ${currentCurrency}${Math.abs(diff).toFixed(2)} (${percDiff.toFixed(1)}%) on ${altFlag} site`;
+        highlight = 'color: #e67e00;';
       } else {
-        verdict = `${altFlag} cheaper by ${currentCurrency}${Math.abs(diff).toFixed(2)} (${percDiff.toFixed(1)}%)`;
-        highlight = 'color: red;';
+        verdict = `\u2705 Cheaper here by ${currentCurrency}${Math.abs(diff).toFixed(2)} (${percDiff.toFixed(1)}%)`;
+        highlight = 'color: #2e7d32;';
       }
     } else {
-      verdict = 'Prices are about the same';
-      highlight = '';
+      verdict = 'Same price on both sites';
+      highlight = 'color: #888;';
     }
-  } else {
-    altPriceDisplay = `<span style=\"color: gray;\">Could not fetch alternate price</span>`;
-    verdict = '';
-    highlight = '';
   }
-  return { verdict, highlight, altPriceDisplay, diff, percDiff, altPriceConverted };
+  return { verdict, highlight, diff, percDiff, altPriceConverted };
 }

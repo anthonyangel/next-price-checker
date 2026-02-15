@@ -1,26 +1,22 @@
 /**
- * Given a Next UK/IL product URL, returns the equivalent product URL on the alternate site.
- * - UK to IL: always adds /en prefix to the path.
- * - IL to UK: removes /en prefix if present.
+ * Given a product URL on a supported retailer, returns the equivalent URL on the alternate site.
+ * Uses the retailer registry to handle URL transformations generically.
  *
  * @param currentUrl The current product URL (as a URL object)
  * @returns The alternate site product URL as a string
  */
+import { getRetailerAndRegion } from './core/registry';
+
 export function getAlternateUrl(currentUrl: URL): string {
-  const isUK = currentUrl.hostname.endsWith('.co.uk');
-  const altDomain = isUK ? 'www.next.co.il' : 'www.next.co.uk';
+  const match = getRetailerAndRegion(currentUrl.hostname);
 
-  // Adjust path for alternate site
-  const hasEnPath = currentUrl.pathname.startsWith('/en');
-  const altPath = isUK
-    ? '/en' + currentUrl.pathname // UK to IL: always add /en prefix
-    : hasEnPath
-      ? currentUrl.pathname.slice(3)
-      : currentUrl.pathname; // IL to UK: remove /en if present
+  if (match) {
+    const { retailer, regionId } = match;
+    const altRegionId = retailer.getAlternateRegionId(regionId);
+    if (altRegionId) {
+      return retailer.transformUrl(currentUrl, regionId, altRegionId);
+    }
+  }
 
-  const altUrl = `${currentUrl.protocol}//${altDomain}${altPath}${currentUrl.search}${currentUrl.hash}`;
-  // Remove debug logs for production cleanliness
-  // console.log(`[urlUtils.ts] Current URL: ${currentUrl.href}`);
-  // console.log(`[urlUtils.ts] Alternate URL: ${altUrl}`);
-  return altUrl;
+  throw new Error(`No retailer found for hostname: ${currentUrl.hostname}`);
 }

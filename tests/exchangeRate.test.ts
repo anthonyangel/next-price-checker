@@ -1,5 +1,5 @@
 import { vi, beforeEach } from 'vitest';
-import { CACHE_KEY, FALLBACK_RATE, CACHE_DURATION_MS } from '../src/constants';
+import { CACHE_KEY, FALLBACK_RATES, CACHE_DURATION_MS } from '../src/constants';
 import type { ExchangeRateData } from '../src/types';
 
 vi.mock('../src/storageUtils', () => ({
@@ -62,7 +62,7 @@ describe('fetchExchangeRate', () => {
 
     const result = await fetchExchangeRate();
 
-    expect(result.rate).toBe(FALLBACK_RATE);
+    expect(result.rate).toBe(FALLBACK_RATES['GBP:ILS']);
     expect(result.fallback).toBe(true);
     expect(result.timestamp).toBeNull();
   });
@@ -77,7 +77,7 @@ describe('fetchExchangeRate', () => {
 
     const result = await fetchExchangeRate();
 
-    expect(result.rate).toBe(FALLBACK_RATE);
+    expect(result.rate).toBe(FALLBACK_RATES['GBP:ILS']);
     expect(result.fallback).toBe(true);
   });
 
@@ -91,7 +91,7 @@ describe('fetchExchangeRate', () => {
 
     const result = await fetchExchangeRate();
 
-    expect(result.rate).toBe(FALLBACK_RATE);
+    expect(result.rate).toBe(FALLBACK_RATES['GBP:ILS']);
     expect(result.fallback).toBe(true);
   });
 });

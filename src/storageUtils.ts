@@ -19,3 +19,68 @@ export async function getFromStorage<T>(key: string): Promise<T | undefined> {
 export async function setToStorage<T>(key: string, value: T): Promise<void> {
   await chrome.storage.local.set({ [key]: value });
 }
+
+import { PRICE_CACHE_KEY_PREFIX, PRICE_CACHE_TTL_MS } from './constants';
+import type { PriceCacheItem, RegionPriceEntry } from './types';
+
+import { log } from './logger';
+
+/**
+ * Gets a cached price for a product in a specific region, if it exists and is fresh.
+ */
+export async function getCachedPrice(
+  pid: string,
+  regionId: string
+): Promise<RegionPriceEntry | null> {
+  const key = `${PRICE_CACHE_KEY_PREFIX}${pid}`;
+  const item = await getFromStorage<PriceCacheItem>(key);
+
+  if (!item) return null;
+
+  const entry = item[regionId];
+  if (!entry) return null;
+
+  // Check TTL
+  if (Date.now() - entry.timestamp > PRICE_CACHE_TTL_MS) {
+    log(`[storageUtils] Cache expired for ${pid}:${regionId}`);
+    // Remove just this region entry; keep others
+    delete item[regionId];
+    if (Object.keys(item).length === 0) {
+      await chrome.storage.local.remove(key);
+    } else {
+      await setToStorage(key, item);
+    }
+    return null;
+  }
+
+  log(`[storageUtils] Cache HIT for ${pid}:${regionId} → ${entry.price}`);
+  return entry;
+}
+
+/**
+ * Per-key write locks to prevent read-modify-write races when
+ * concurrent calls cache different regions for the same PID.
+ */
+const writeLocks = new Map<string, Promise<void>>();
+
+/**
+ * Caches a price for a product in a specific region.
+ * Merges into the existing cache entry so both regions coexist.
+ * Serialized per key to prevent concurrent writes from losing data.
+ */
+export async function setCachedPrice(
+  pid: string,
+  regionId: string,
+  price: number
+): Promise<void> {
+  const key = `${PRICE_CACHE_KEY_PREFIX}${pid}`;
+  const prev = writeLocks.get(key) ?? Promise.resolve();
+  const op = prev.then(async () => {
+    const existing = (await getFromStorage<PriceCacheItem>(key)) ?? {};
+    existing[regionId] = { price, timestamp: Date.now() };
+    await setToStorage(key, existing);
+    log(`[storageUtils] Cache WRITE for ${pid.toUpperCase()}:${regionId} → ${price}`);
+  });
+  writeLocks.set(key, op.catch(() => {}));
+  await op;
+}

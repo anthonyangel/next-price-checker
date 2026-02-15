@@ -19,13 +19,11 @@ describe('getSiteMeta', () => {
     expect(meta.altCurrency).toBe('£');
   });
 
-  it('treats non-.co.uk hostname as IL', () => {
-    const meta = getSiteMeta('shop.next.co.il');
-    expect(meta.isUK).toBe(false);
+  it('throws for unrecognized hostname', () => {
+    expect(() => getSiteMeta('shop.next.co.il')).toThrow('No retailer found');
   });
 
-  it('handles hostname without www prefix', () => {
-    const meta = getSiteMeta('next.co.uk');
-    expect(meta.isUK).toBe(true);
+  it('throws for hostname without www prefix', () => {
+    expect(() => getSiteMeta('next.co.uk')).toThrow('No retailer found');
   });
 });

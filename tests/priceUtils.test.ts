@@ -34,61 +34,60 @@ describe('parsePrice', () => {
     expect(parsePrice('0')).toBe(0);
   });
 
-  // Documents known bug: price ranges produce incorrect results (issue #17)
-  it('incorrectly parses price range as single number (known bug #17)', () => {
-    // "₪45.00 - ₪60.00" → strips non-numeric → "45.0060.00" → parseFloat → 45.006
-    const result = parsePrice('₪45.00 - ₪60.00');
-    expect(result).toBe(45.006);
+  it('parses price range by taking the first price', () => {
+    expect(parsePrice('₪45.00 - ₪60.00')).toBe(45.0);
+  });
+
+  it('parses price range with en-dash', () => {
+    expect(parsePrice('£12.99 – £19.99')).toBe(12.99);
   });
 });
 
 describe('getPriceComparisonVerdict', () => {
   const rate = 4.6; // GBP to ILS
 
-  // Documents known bug: verdict text is inverted (issue #15)
-  // When diff > 0, currentPrice > altConverted, meaning alt IS cheaper.
-  // But the code says "${altFlag} more expensive" — which is backwards.
-  it('returns inverted verdict when alt is cheaper (known bug #15)', async () => {
-    // UK price £50, IL price ₪100. Converted: ₪100 / 4.6 ≈ £21.74. UK is more expensive.
-    // diff = 50 - 21.74 = 28.26 > 0, so alt IS cheaper.
-    // Bug: code says "🇮🇱 more expensive" with green highlight (should say cheaper with green)
+  it('says alt is cheaper when current price is higher', async () => {
+    // UK price £50, IL price ₪100. Converted: ₪100 / 4.6 ≈ £21.74. Alt IS cheaper.
+    // diff = 50 - 21.74 = 28.26 > 0
     const result = await getPriceComparisonVerdict({
       currentPrice: '£50.00',
       altPrice: '₪100.00',
       isUK: true,
       rate,
+      hostname: 'www.next.co.uk',
     });
     expect(result.diff).toBeGreaterThan(0);
-    expect(result.verdict).toContain('more expensive'); // Bug: should say "cheaper"
-    expect(result.highlight).toBe('color: green;');
+    expect(result.verdict).toContain('Save');
+    expect(result.highlight).toBe('color: #e67e00;');
   });
 
-  it('returns inverted verdict when alt is more expensive (known bug #15)', async () => {
+  it('says cheaper here when alt is more expensive', async () => {
     // UK price £10, IL price ₪200. Converted: ₪200 / 4.6 ≈ £43.48. Alt is more expensive.
     // diff = 10 - 43.48 = -33.48 < 0
-    // Bug: code says "🇮🇱 cheaper" with red highlight (should say more expensive with red)
     const result = await getPriceComparisonVerdict({
       currentPrice: '£10.00',
       altPrice: '₪200.00',
       isUK: true,
       rate,
+      hostname: 'www.next.co.uk',
     });
     expect(result.diff).toBeLessThan(0);
-    expect(result.verdict).toContain('cheaper'); // Bug: should say "more expensive"
-    expect(result.highlight).toBe('color: red;');
+    expect(result.verdict).toContain('Cheaper here');
+    expect(result.highlight).toBe('color: #2e7d32;');
   });
 
-  it('returns "about the same" when prices are nearly equal', async () => {
+  it('returns "same price" when prices are nearly equal', async () => {
     // UK price £21.74, IL price ₪100 → converted ≈ £21.74
     const result = await getPriceComparisonVerdict({
       currentPrice: '£21.74',
       altPrice: '₪100.00',
       isUK: true,
       rate,
+      hostname: 'www.next.co.uk',
     });
     expect(Math.abs(result.diff)).toBeLessThanOrEqual(0.01);
-    expect(result.verdict).toBe('Prices are about the same');
-    expect(result.highlight).toBe('');
+    expect(result.verdict).toBe('Same price on both sites');
+    expect(result.highlight).toBe('color: #888;');
   });
 
   it('returns empty verdict when alt price is invalid', async () => {
@@ -97,9 +96,10 @@ describe('getPriceComparisonVerdict', () => {
       altPrice: 'N/A',
       isUK: true,
       rate,
+      hostname: 'www.next.co.uk',
     });
     expect(result.verdict).toBe('');
-    expect(result.altPriceDisplay).toContain('Could not fetch');
+    expect(result.diff).toBe(0);
   });
 
   it('converts correctly from IL perspective', async () => {
@@ -110,6 +110,7 @@ describe('getPriceComparisonVerdict', () => {
       altPrice: '£50.00',
       isUK: false,
       rate,
+      hostname: 'www.next.co.il',
     });
     expect(result.altPriceConverted).toBeCloseTo(230);
     expect(result.diff).toBeLessThan(0);
@@ -121,6 +122,7 @@ describe('getPriceComparisonVerdict', () => {
       altPrice: '₪100.00',
       isUK: true,
       rate,
+      hostname: 'www.next.co.uk',
     });
     expect(result.percDiff).toBeGreaterThan(0);
   });

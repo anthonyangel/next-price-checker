@@ -1,211 +1,359 @@
 /**
- * Handles all content script logic for extracting prices, injecting verdicts, and messaging.
+ * Content script — extracts products, fetches alternate prices via background
+ * (Bloomreach API), and injects verdict elements into the page.
  */
 
-console.log('[content_script] Loaded');
-
 import { getAlternateUrl } from './urlUtils';
-import {
-  priceSelector,
-  productContainerSelector,
-  productContainerFallbackSelectors,
-} from './selectors';
 import { getSiteMeta } from './siteMeta';
 import { log, warn } from './logger';
-import { injectVerdict } from './domUtils';
-import type { ScanListingPageMessage } from './types';
+import { injectVerdict, type VerdictContent } from './domUtils';
+import type { ScanListingPageMessage, CatalogSummary } from './types';
+import { getCachedPrice, setCachedPrice } from './storageUtils';
+import { getRetailerAndRegion } from './core/registry';
+import { parsePrice } from './priceUtils';
 
-// Move WindowWithNpcCache and AltPriceCache interfaces to the top of the file for global use
-interface AltPriceCache {
-  [altUrl: string]: { price?: string | number; status?: number };
-}
-interface WindowWithNpcCache extends Window {
-  _npcAltPriceCache?: AltPriceCache;
+log('[content_script] Loaded');
+
+interface WindowWithNpcState extends Window {
   _nextPriceCheckerProducts?: Array<{ link: string; price: string }>;
   _npcInfiniteScrollObserver?: MutationObserver;
   _npcScrollTimeout?: ReturnType<typeof setTimeout>;
 }
-const win = window as WindowWithNpcCache;
+const win = window as WindowWithNpcState;
 
-chrome.runtime.onMessage.addListener((msg: ScanListingPageMessage, sender, sendResponse) => {
-  if (msg.action === 'scanListingPage') {
-    console.log('[content_script] Received scanListingPage message');
+/** Derive a stable DOM-safe ID from a product URL. */
+function productDomId(link: string): string {
+  return btoa(String.fromCharCode(...new TextEncoder().encode(link)))
+    .replace(/=+$/, '')
+    .replace(/[/+]/g, '_');
+}
 
-    (async () => {
-      let responseObj: { products?: Array<{ link: string; price: string }>; error?: string } = {};
-      let products: Array<{ link: string; price: string }> = [];
-      try {
-        // Try to detect product page price if product container is not found
-        let productContainer = document.querySelector(
-          productContainerSelector
-        ) as HTMLElement | null;
-        if (!productContainer) {
-          // Try fallback selectors for robustness
-          let fallback1 = null;
-          let fallback2 = null;
-          if (productContainerFallbackSelectors.length > 0) {
-            fallback1 = document.querySelector(productContainerFallbackSelectors[0]);
-          }
-          if (productContainerFallbackSelectors.length > 1) {
-            fallback2 = document.querySelector(productContainerFallbackSelectors[1]);
-          }
-          productContainer = (fallback1 || fallback2) as HTMLElement | null;
-        }
-        if (productContainer) {
-          const productDivs = Array.from(productContainer.children);
-          products = productDivs.map((div, _idx) => {
-            const anchor = div.querySelector('a[href]') as HTMLAnchorElement | null;
-            // Try priceSelector first for each product, then fallback
-            let priceEl = div.querySelector(priceSelector) as HTMLElement | null;
-            if (!priceEl) {
-              priceEl = div.querySelector('.product-price, [data-testid="price"], span');
-            }
-            const link = anchor?.href ?? 'N/A';
-            const price = priceEl?.textContent?.trim() ?? 'N/A';
-            return { link, price };
-          });
-        } else {
-          // Try priceSelector from selectors.ts first, then fallback to generic selectors
-          let priceEl = document.querySelector(priceSelector) as HTMLElement | null;
-          if (!priceEl) {
-            priceEl = document.querySelector('.product-price, [data-testid="price"], span');
-          }
-          if (priceEl && priceEl.textContent) {
-            products = [{ link: window.location.href, price: priceEl.textContent.trim() }];
-          } else {
-            products = [];
-          }
-        }
-        win._nextPriceCheckerProducts = products;
-        chrome.runtime.sendMessage({ action: 'npcProducts', products });
-        // --- Inject price comparison for product page if on a product page ---
-        // For single product pages, do NOT inject or update the DOM; only send price data for the popup
-        // --- Inject price comparison for listing page (multiple products) ---
-        if (products.length > 1) {
-          // Always re-inject verdicts for all visible products (for infinite scroll)
-          if (productContainer) {
-            // Remove any previous verdicts before injecting new ones to handle infinite scroll and re-injection
-            // (Do NOT remove verdicts here, only in processBatch for each product)
-          }
-          // For each product, fetch alternate price and inject into DOM in batches of 10
-          const batchSize = 10;
-          // Simple in-memory cache for alternate prices (per session)
-          const altPriceCache = win._npcAltPriceCache ?? (win._npcAltPriceCache = {});
-          const processBatch = (batch: Array<{ link: string; price: string }>, offset: number) => {
-            log(
-              `[content_script] processBatch called: batch.length=${batch.length}, offset=${offset}`
-            );
-            batch.forEach((product, _idx) => {
-              // Move siteMeta declaration to just before first use in each code path
-              let siteMeta: ReturnType<typeof getSiteMeta>;
-              const uniqueId = btoa(unescape(encodeURIComponent(product.link)))
-                .replace(/=+$/, '')
-                .replace(/\/+/, '_');
-              const compareId = `npc-price-compare-${uniqueId}`;
-              const productDiv = productContainer?.children[offset + _idx] as
-                | HTMLElement
-                | undefined;
-              if (!productDiv) {
-                warn(
-                  `[content_script] No productDiv found for idx=${offset + _idx}, url=${product.link}`
-                );
-                return;
-              }
-              siteMeta = getSiteMeta(location.hostname);
-              log(
-                `[content_script] Processing productDiv idx=${offset + _idx}, compareId=${compareId}, url=${product.link}`
-              );
-              // --- Debug: Log productDiv and its HTML for troubleshooting ---
-              log(`[content_script] productDiv.outerHTML:`, productDiv.outerHTML);
-              // --- End debug ---
-              const oldVerdict = productDiv.querySelector(`#${compareId}`);
-              if (oldVerdict && oldVerdict.parentElement) {
-                oldVerdict.parentElement.removeChild(oldVerdict);
-              }
-              let priceEl = productDiv.querySelector('.product-price, [data-testid="price"], span');
-              log(`[content_script] priceEl:`, priceEl ? priceEl.outerHTML : 'null');
-              if (priceEl && priceEl.parentElement) {
-                // No need to call removeVerdictById here, injectVerdict will handle it
-              }
-              try {
-                const altUrl = getAlternateUrl(new URL(product.link));
-                if (!altPriceCache) return;
-                if (altPriceCache[altUrl]) {
-                  siteMeta = getSiteMeta(location.hostname);
-                  renderAndInjectVerdict(
-                    product,
-                    compareId,
-                    productDiv,
-                    altPriceCache[altUrl],
-                    siteMeta,
-                    priceEl
-                  );
-                  return;
-                }
-                chrome.runtime
-                  .sendMessage({
-                    action: 'getAlternatePrice',
-                    url: altUrl,
-                    priceSelector,
-                  })
-                  .then((resp: { price?: string | number; status?: number }) => {
-                    if (!altPriceCache) return;
-                    altPriceCache[altUrl] = resp;
-                    siteMeta = getSiteMeta(location.hostname);
-                    renderAndInjectVerdict(product, compareId, productDiv, resp, siteMeta, priceEl);
-                  });
-              } catch (e) {
-                warn(
-                  '[content_script] Could not fetch or inject alternate price for listing product:',
-                  e
-                );
-              }
-            });
-          };
-          let offset = 0;
-          function processNextBatch() {
-            if (offset >= products.length) return;
-            const batch = products.slice(offset, offset + batchSize);
-            processBatch(batch, offset);
-            offset += batchSize;
-            if (offset < products.length) {
-              setTimeout(processNextBatch, 800); // 800ms between batches
-            }
-          }
-          processNextBatch();
-          // --- Infinite scroll support: observe for new products ---
-          if (productContainer && !win._npcInfiniteScrollObserver) {
-            const observer = new MutationObserver(() => {
-              // Debounce to avoid rapid re-injection
-              if (win._npcScrollTimeout) clearTimeout(win._npcScrollTimeout);
-              win._npcScrollTimeout = setTimeout(() => {
-                chrome.runtime.sendMessage({ action: 'scanListingPage' });
-              }, 200);
-            });
-            observer.observe(productContainer, { childList: true, subtree: false });
-            win._npcInfiniteScrollObserver = observer;
-            console.log('[content_script] Infinite scroll observer attached');
-          }
-        }
-        sendResponse();
-        return;
-      } catch (e) {
-        console.error('[content_script] Error scanning listing:', e);
-        let errorMsg = 'Unknown error';
-        if (e && typeof e === 'object' && e !== null && 'message' in e) {
-          errorMsg = (e as { message: string }).message;
-        }
-        responseObj = { error: errorMsg };
+let scanInProgress = false;
+let filterActive = false;
+
+/**
+ * Core scan logic — extracts products from the page, sends them to the popup,
+ * and fetches alternate prices via the Bloomreach API (through background).
+ */
+async function scanPage() {
+  if (scanInProgress) return;
+  scanInProgress = true;
+  try {
+    const retailerMatch = getRetailerAndRegion(location.hostname);
+    if (!retailerMatch) {
+      warn('[content_script] No retailer found for', location.hostname);
+      return;
+    }
+    const { retailer } = retailerMatch;
+
+    let products: Array<{ link: string; price: string }> = [];
+
+    let productContainer = document.querySelector(retailer.productContainerSelector) as HTMLElement | null;
+    if (!productContainer) {
+      for (const sel of retailer.productContainerFallbackSelectors) {
+        productContainer = document.querySelector(sel) as HTMLElement | null;
+        if (productContainer) break;
       }
-      console.log('[content_script] Sending response:', responseObj);
-      win._nextPriceCheckerProducts = responseObj.products ?? [];
-      sendResponse();
-    })();
-    return true;
-  }
-});
+    }
 
-// --- Price comparison injection for product page ---
+    if (productContainer) {
+      const productDivs = Array.from(productContainer.children);
+      products = productDivs.map((div) => {
+        const anchor = div.querySelector('a[href]') as HTMLAnchorElement | null;
+        const priceEl = div.querySelector(retailer.priceSelector) as HTMLElement | null;
+        const link = anchor?.href ?? 'N/A';
+        const price = priceEl?.textContent?.trim() ?? 'N/A';
+        return { link, price };
+      });
+    } else {
+      const priceEl = document.querySelector(retailer.priceSelector) as HTMLElement | null;
+      if (priceEl && priceEl.textContent) {
+        products = [{ link: window.location.href, price: priceEl.textContent.trim() }];
+      } else {
+        products = [];
+      }
+    }
+
+    win._nextPriceCheckerProducts = products;
+    chrome.runtime.sendMessage({ action: 'npcProducts', products });
+
+    // --- Catalog page: bulk fetch all alternate prices in one message ---
+    if (products.length > 1 && productContainer) {
+      const siteMeta = getSiteMeta(location.hostname);
+      const container = productContainer; // capture for closure
+
+      // Determine current and alternate region
+      const currentRegionId = retailerMatch.regionId;
+      const altRegionId = retailer.getAlternateRegionId(currentRegionId);
+
+      // Build metadata for each product, check cache
+      const uncachedUrls: string[] = [];
+      // Track resolved alt prices for summary: pid → altPrice (numeric)
+      const resolvedAltPrices: Map<string, number> = new Map();
+      const productMeta: Array<{
+        product: { link: string; price: string };
+        altUrl: string | null;
+        pid: string | null;
+        idx: number;
+        compareId: string;
+      }> = [];
+
+      for (let i = 0; i < products.length; i++) {
+        const product = products[i];
+        let altUrl: string | null = null;
+        let pid: string | null = null;
+        try {
+          const productUrl = new URL(product.link);
+          altUrl = getAlternateUrl(productUrl);
+          pid = retailer.extractProductId(productUrl);
+        } catch {
+          // skip products without valid links
+        }
+
+        const domId = productDomId(product.link);
+        const compareId = `npc-price-compare-${domId}`;
+        productMeta.push({ product, altUrl, pid, idx: i, compareId });
+
+        if (!altUrl || !pid) continue;
+
+        // Cache current page price for this product
+        if (currentRegionId) {
+          const currentPrice = parsePrice(product.price);
+          if (currentPrice !== null) {
+            setCachedPrice(pid, currentRegionId, currentPrice);
+          }
+        }
+
+        // Check persistent cache for alternate price
+        if (altRegionId) {
+          const cached = await getCachedPrice(pid, altRegionId);
+          if (cached) {
+            log(`[content_script] Cache HIT for ${pid}:${altRegionId}`);
+            resolvedAltPrices.set(pid, cached.price);
+            const productDiv = container.children[i] as HTMLElement | undefined;
+            if (productDiv) {
+              renderAndInjectVerdict(
+                product,
+                compareId,
+                productDiv,
+                { price: cached.price },
+                siteMeta,
+                productDiv.querySelector(retailer.priceSelector)
+              );
+            }
+            continue;
+          }
+        }
+
+        uncachedUrls.push(altUrl);
+      }
+
+      // Fetch all uncached prices in one bulk message
+      if (uncachedUrls.length > 0) {
+        log(`[content_script] Bulk API fetch: ${uncachedUrls.length} products`);
+        try {
+          const catalogResp: Record<string, { price: number }> =
+            await chrome.runtime.sendMessage({
+              action: 'getAlternateCatalogPrices',
+              urls: uncachedUrls,
+            });
+
+          for (const meta of productMeta) {
+            if (!meta.altUrl) continue;
+            const resp = catalogResp[meta.altUrl];
+            const productDiv = container.children[meta.idx] as HTMLElement | undefined;
+            if (!productDiv) continue;
+
+            if (resp?.price != null) {
+              // Cache alternate price and render
+              if (meta.pid && altRegionId) {
+                setCachedPrice(meta.pid, altRegionId, resp.price);
+                resolvedAltPrices.set(meta.pid, resp.price);
+              }
+              renderAndInjectVerdict(
+                meta.product,
+                meta.compareId,
+                productDiv,
+                resp,
+                siteMeta,
+                productDiv.querySelector(retailer.priceSelector)
+              );
+            } else if (uncachedUrls.includes(meta.altUrl)) {
+              // No result from API — render fallback
+              renderAndInjectVerdict(
+                meta.product,
+                meta.compareId,
+                productDiv,
+                {},
+                siteMeta,
+                productDiv.querySelector(retailer.priceSelector)
+              );
+            }
+          }
+        } catch (e) {
+          warn('[content_script] Bulk catalog fetch failed:', e);
+        }
+      }
+
+      // Send catalog summary to popup and tag product divs for filtering
+      await sendCatalogSummary(productMeta, resolvedAltPrices, siteMeta, container);
+
+      // Re-apply filter if active (e.g. after infinite scroll re-scan)
+      if (filterActive) {
+        applyFilter(true);
+      }
+
+      // Infinite scroll observer
+      if (!win._npcInfiniteScrollObserver) {
+        const observer = new MutationObserver(() => {
+          if (win._npcScrollTimeout) clearTimeout(win._npcScrollTimeout);
+          win._npcScrollTimeout = setTimeout(() => {
+            scanPage();
+          }, 200);
+        });
+        observer.observe(container, { childList: true, subtree: false });
+        win._npcInfiniteScrollObserver = observer;
+        log('[content_script] Infinite scroll observer attached');
+      }
+    }
+  } finally {
+    scanInProgress = false;
+  }
+}
+
+/**
+ * Compute and send a catalog price comparison summary to the popup.
+ * Also tags each product div with data-npc-verdict for filtering.
+ */
+async function sendCatalogSummary(
+  productMeta: Array<{
+    product: { link: string; price: string };
+    altUrl: string | null;
+    pid: string | null;
+    idx: number;
+  }>,
+  resolvedAltPrices: Map<string, number>,
+  siteMeta: ReturnType<typeof getSiteMeta>,
+  container: HTMLElement
+) {
+  const { getCachedOrFetchRate } = await import('./exchangeRate');
+  const { rate } = await getCachedOrFetchRate();
+
+  let cheaperHere = 0;
+  let cheaperOnAlt = 0;
+  let same = 0;
+  const savingsAlt: CatalogSummary['topSavingsAlt'] = [];
+  const savingsHere: CatalogSummary['topSavingsHere'] = [];
+
+  for (const meta of productMeta) {
+    const productDiv = container.children[meta.idx] as HTMLElement | undefined;
+
+    if (!meta.pid || !meta.altUrl) {
+      if (productDiv) productDiv.dataset.npcVerdict = 'unknown';
+      continue;
+    }
+    const altPrice = resolvedAltPrices.get(meta.pid);
+    if (altPrice == null) {
+      if (productDiv) productDiv.dataset.npcVerdict = 'unknown';
+      continue;
+    }
+
+    const currentPrice = parsePrice(meta.product.price);
+    if (currentPrice == null) {
+      if (productDiv) productDiv.dataset.npcVerdict = 'unknown';
+      continue;
+    }
+
+    // Convert alt price to current currency for comparison
+    const altConverted = siteMeta.isUK ? altPrice / rate : altPrice * rate;
+    const diff = currentPrice - altConverted;
+    const percDiff = (Math.abs(diff) / ((currentPrice + altConverted) / 2)) * 100;
+    if (Math.abs(diff) <= 0.01) {
+      same++;
+      if (productDiv) productDiv.dataset.npcVerdict = 'same';
+    } else if (diff > 0) {
+      // Alt site is cheaper
+      cheaperOnAlt++;
+      if (productDiv) productDiv.dataset.npcVerdict = 'cheaper-alt';
+      savingsAlt.push({
+        pid: meta.pid,
+        saving: `${siteMeta.currentCurrency}${Math.abs(diff).toFixed(2)}`,
+        percDiff,
+        url: meta.altUrl,
+      });
+    } else {
+      cheaperHere++;
+      if (productDiv) productDiv.dataset.npcVerdict = 'cheaper-here';
+      savingsHere.push({
+        pid: meta.pid,
+        saving: `${siteMeta.currentCurrency}${Math.abs(diff).toFixed(2)}`,
+        percDiff,
+        url: meta.product.link,
+      });
+    }
+  }
+
+  // Sort by biggest % saving, keep top 3 each
+  savingsAlt.sort((a, b) => b.percDiff - a.percDiff);
+  savingsHere.sort((a, b) => b.percDiff - a.percDiff);
+
+  const summary: CatalogSummary = {
+    total: productMeta.length,
+    compared: cheaperHere + cheaperOnAlt + same,
+    cheaperHere,
+    cheaperOnAlt,
+    same,
+    topSavingsAlt: savingsAlt.slice(0, 3),
+    topSavingsHere: savingsHere.slice(0, 3),
+  };
+
+  log('[content_script] Sending catalog summary:', summary);
+  chrome.runtime.sendMessage({ action: 'npcCatalogSummary', summary });
+}
+
+/** Apply or remove the "show only cheaper here" filter on catalog product divs. */
+function applyFilter(hide: boolean) {
+  filterActive = hide;
+
+  const match = getRetailerAndRegion(location.hostname);
+  if (!match) return;
+
+  let container = document.querySelector(match.retailer.productContainerSelector) as HTMLElement | null;
+  if (!container) {
+    for (const sel of match.retailer.productContainerFallbackSelectors) {
+      container = document.querySelector(sel) as HTMLElement | null;
+      if (container) break;
+    }
+  }
+  if (!container) return;
+
+  for (const child of Array.from(container.children) as HTMLElement[]) {
+    const verdict = child.dataset.npcVerdict;
+    if (!hide) {
+      child.style.display = '';
+    } else {
+      // Only show products that are cheaper (or same price) on the current site
+      child.style.display = verdict === 'cheaper-here' || verdict === 'same' ? '' : 'none';
+    }
+  }
+}
+
+chrome.runtime.onMessage.addListener(
+  (msg: ScanListingPageMessage & { action: string; hide?: boolean }, _sender, sendResponse) => {
+    if (msg.action === 'scanListingPage') {
+      log('[content_script] Received scanListingPage message');
+      scanPage();
+      sendResponse();
+      return true;
+    }
+    if (msg.action === 'npcFilterCatalog') {
+      applyFilter(!!msg.hide);
+      sendResponse();
+      return true;
+    }
+  }
+);
+
 function renderAndInjectVerdict(
   product: { link: string; price: string },
   compareId: string,
@@ -214,10 +362,25 @@ function renderAndInjectVerdict(
   siteMeta: ReturnType<typeof getSiteMeta>,
   priceEl: Element | null
 ) {
-  let verdictHtml = '';
+  const altUrl = getAlternateUrl(new URL(product.link));
+
   if (resp && resp.status === 404) {
-    verdictHtml = `<span style=\"color: orange;\">Alternate site not found (404). <a href=\"${getAlternateUrl(new URL(product.link))}\" target=\"_blank\">View alternate site</a></span>`;
-  } else if (resp && resp.price !== null && resp.price !== undefined) {
+    const content: VerdictContent = {
+      lines: [
+        { type: 'text', text: 'Not available on alternate site', style: 'color: orange;' },
+        { type: 'link', text: 'View alternate site', href: altUrl },
+      ],
+    };
+    injectVerdict(
+      priceEl && priceEl.parentElement ? priceEl.parentElement : productDiv,
+      compareId,
+      content,
+      priceEl
+    );
+    return;
+  }
+
+  if (resp && resp.price !== null && resp.price !== undefined) {
     import('./exchangeRate').then(async ({ getCachedOrFetchRate }) => {
       const { getPriceComparisonVerdict } = await import('./priceUtils');
       const { rate } = await getCachedOrFetchRate();
@@ -226,43 +389,79 @@ function renderAndInjectVerdict(
         altPrice: resp.price!.toString(),
         isUK: siteMeta.isUK,
         rate,
+        hostname: location.hostname,
       });
       const altPriceNum = parseFloat(resp.price!.toString().replace(/[^\d.]/g, ''));
-      const altConvertedDisplay = siteMeta.isUK
-        ? `≈ £${result.altPriceConverted.toFixed(2)}`
-        : `≈ ₪${result.altPriceConverted.toFixed(2)}`;
-      const altDisplay = `Alternate site: ${siteMeta.altCurrency}${altPriceNum.toFixed(2)} (${altConvertedDisplay})`;
-      let verdictMsg = '';
-      let verdictColor = '';
+      const altConvertedDisplay = `≈ ${siteMeta.currentCurrency}${result.altPriceConverted.toFixed(2)}`;
+      const altHostname = new URL(altUrl).hostname.replace('www.', '');
+      const altPriceInfo = `${siteMeta.altFlag} ${siteMeta.altCurrency}${altPriceNum.toFixed(2)} on ${altHostname} (${altConvertedDisplay})`;
+
+      let content: VerdictContent;
       if (Math.abs(result.diff) > 0.01) {
         if (result.diff > 0) {
-          verdictMsg = `📈 Alternate site is cheaper by ${siteMeta.currentCurrency}${Math.abs(result.diff).toFixed(2)} (${result.percDiff.toFixed(1)}%)`;
-          verdictColor = 'color: red;';
+          // Alternate site is cheaper — nudge user with a CTA
+          const saving = `${siteMeta.currentCurrency}${Math.abs(result.diff).toFixed(2)}`;
+          content = {
+            lines: [
+              { type: 'text', text: altPriceInfo, style: 'color: #666;' },
+              { type: 'br' },
+              {
+                type: 'text',
+                text: `Save ${saving} (${result.percDiff.toFixed(1)}%) on ${altHostname}`,
+                style: 'color: #e67e00; font-weight: bold;',
+              },
+              { type: 'br' },
+              {
+                type: 'link',
+                text: `Buy on ${altHostname} \u2192`,
+                href: altUrl,
+                style:
+                  'display: inline-block; margin-top: 4px; padding: 4px 10px; background: #e67e00; color: #fff; border-radius: 4px; text-decoration: none; font-size: 0.85em; font-weight: bold;',
+              },
+            ],
+          };
         } else {
-          verdictMsg = `📉 Alternate site is more expensive by ${siteMeta.currentCurrency}${Math.abs(result.diff).toFixed(2)} (${result.percDiff.toFixed(1)}%)`;
-          verdictColor = 'color: green;';
+          // Current site is cheaper — positive reinforcement
+          const saving = `${siteMeta.currentCurrency}${Math.abs(result.diff).toFixed(2)}`;
+          content = {
+            lines: [
+              { type: 'text', text: altPriceInfo, style: 'color: #666;' },
+              { type: 'br' },
+              {
+                type: 'text',
+                text: `\u2705 Cheaper here by ${saving} (${result.percDiff.toFixed(1)}%)`,
+                style: 'color: #2e7d32;',
+              },
+            ],
+          };
         }
       } else {
-        verdictMsg = 'Prices are about the same';
-        verdictColor = '';
+        content = {
+          lines: [
+            { type: 'text', text: altPriceInfo, style: 'color: #666;' },
+            { type: 'br' },
+            { type: 'text', text: 'Same price on both sites', style: 'color: #888;' },
+          ],
+        };
       }
-      verdictHtml = `${altDisplay}<br><span style=\"${verdictColor}\">${verdictMsg}</span><br><a href=\"${getAlternateUrl(new URL(product.link))}\" target=\"_blank\" rel=\"noopener noreferrer\">View alternate site</a>`;
       injectVerdict(
         priceEl && priceEl.parentElement ? priceEl.parentElement : productDiv,
         compareId,
-        verdictHtml,
+        content,
         priceEl
       );
       log(`[content_script] Injected verdict for id=${compareId}, url=${product.link}`);
     });
     return;
-  } else {
-    verdictHtml = `<span style=\"color: gray;\">Could not fetch alternate price</span>`;
   }
+
+  const content: VerdictContent = {
+    lines: [{ type: 'text', text: 'Could not fetch alternate price', style: 'color: gray;' }],
+  };
   injectVerdict(
     priceEl && priceEl.parentElement ? priceEl.parentElement : productDiv,
     compareId,
-    verdictHtml,
+    content,
     priceEl
   );
   log(`[content_script] Injected fallback verdict for id=${compareId}, url=${product.link}`);

@@ -1,57 +1,104 @@
-import { log, warn, error } from './logger';
-import { parsePrice } from './priceUtils';
-import { getCachedOrFetchRate } from './exchangeRate';
-import type { AlternatePriceMessage } from './types';
+/**
+ * Background service worker — handles alternate price lookups.
+ *
+ * Primary strategy: Bloomreach Discovery API (fast JSON fetch, no tabs).
+ * The API credentials are hardcoded per retailer; if they expire,
+ * the module falls back to scraping fresh keys from the homepage.
+ */
 
-console.log('[background.ts] loaded');
+import { log, error } from './logger';
+import { getRetailerAndRegion } from './core/registry';
+import type { AlternatePriceMessage, AlternateCatalogMessage } from './types';
+
+log('[background.ts] loaded');
 
 /**
- * Handles messages for alternate price fetching and extraction in the background script.
+ * Given an alternate-site URL, resolve the retailer, region, and product ID.
  */
-chrome.runtime.onMessage.addListener((msg: AlternatePriceMessage, sender, sendResponse) => {
-  if (msg.action === 'getAlternatePrice') {
-    (async () => {
-      try {
-        const { url } = msg;
-        const res = await fetch(url, { credentials: 'omit' });
-        if (!res.ok) {
-          if (res.status === 404) {
-            warn(`[background.ts] Alternate site not found (404): ${msg.url}`);
-            (sendResponse as (response?: unknown) => void)({ error: '404', status: 404 });
-            return;
-          } else {
-            (sendResponse as (response?: unknown) => void)({
-              error: `HTTP error! status: ${res.status}`,
-              status: res.status,
-            });
+function resolveProduct(url: string) {
+  const parsed = new URL(url);
+  const match = getRetailerAndRegion(parsed.hostname);
+  if (!match) return null;
+  const { retailer, regionId } = match;
+  const pid = retailer.extractProductId(parsed);
+  if (!pid) return null;
+  return { retailer, regionId, pid };
+}
+
+chrome.runtime.onMessage.addListener(
+  (msg: AlternatePriceMessage | AlternateCatalogMessage, _sender, sendResponse) => {
+    /**
+     * Bulk catalog lookup — resolves all URLs via API in parallel.
+     */
+    if (msg.action === 'getAlternateCatalogPrices') {
+      (async () => {
+        try {
+          const { urls } = msg;
+          // Build pid→url mapping, capture retailer and region
+          const pidToUrl: Record<string, string> = {};
+          let regionId: string | null = null;
+          let retailer: NonNullable<ReturnType<typeof resolveProduct>>['retailer'] | null = null;
+          for (const url of urls) {
+            const resolved = resolveProduct(url);
+            if (resolved) {
+              pidToUrl[resolved.pid] = url;
+              regionId = resolved.regionId;
+              retailer = resolved.retailer;
+            }
+          }
+
+          if (!regionId || !retailer || Object.keys(pidToUrl).length === 0) {
+            (sendResponse as (r?: unknown) => void)({});
             return;
           }
-        }
-        const html = await res.text();
-        log(`[background.ts] Fetched HTML for: ${url} (length: ${html ? html.length : 0})`);
-        const match = html.match(/([£₪]\s?\d+[,.]?\d*)/);
-        const altPriceRaw = match ? match[1] : null;
-        log(`[background.ts] Extracted altPriceRaw for ${url}:`, altPriceRaw);
-        const price = parsePrice(altPriceRaw);
-        log(`[background.ts] Parsed price for ${url}:`, price);
-        const { rate } = await getCachedOrFetchRate();
-        const responseObj = {
-          price,
-          converted: price !== null && !isNaN(price) ? price / rate : null,
-        };
-        // @ts-ignore
-        (sendResponse as (response?: unknown) => void)(responseObj);
-        return;
-      } catch (err) {
-        error('[background.ts] Error in getAlternatePrice:', err);
-        (sendResponse as (response?: unknown) => void)({
-          error: err?.toString?.() || 'Unknown error',
-        });
-      }
-    })();
-    return true;
-  }
-  return true; // Keep message channel open
-});
 
-console.log('[background.ts] Background script loaded');
+          const pids = Object.keys(pidToUrl);
+          log(`[background] Catalog lookup: ${pids.length} PIDs for region=${regionId}`);
+          const priceMap = await retailer.lookupPrices(pids, regionId);
+
+          // Map back to URL→price
+          const result: Record<string, { price: number }> = {};
+          for (const [pid, price] of Object.entries(priceMap)) {
+            const url = pidToUrl[pid];
+            if (url) result[url] = { price };
+          }
+
+          log(`[background] Catalog lookup returned ${Object.keys(result).length} prices`);
+          (sendResponse as (r?: unknown) => void)(result);
+        } catch (err) {
+          error('[background] Error in getAlternateCatalogPrices:', err);
+          (sendResponse as (r?: unknown) => void)({});
+        }
+      })();
+      return true;
+    }
+
+    /**
+     * Single product lookup via API.
+     */
+    if (msg.action === 'getAlternatePrice') {
+      (async () => {
+        try {
+          const { url } = msg;
+          const resolved = resolveProduct(url);
+
+          if (!resolved) {
+            log(`[background] Could not resolve product for ${url}`);
+            (sendResponse as (r?: unknown) => void)({ price: null });
+            return;
+          }
+
+          const { retailer, regionId, pid } = resolved;
+          const price = await retailer.lookupPrice(pid, regionId);
+          (sendResponse as (r?: unknown) => void)({ price });
+        } catch (err) {
+          error('[background] Error in getAlternatePrice:', err);
+          (sendResponse as (r?: unknown) => void)({
+            error: err?.toString?.() || 'Unknown error',
+          });
+        }
+      })();
+      return true;
+    }
+  }
+);

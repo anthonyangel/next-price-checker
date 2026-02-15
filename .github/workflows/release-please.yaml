@@ -1,5 +1,8 @@
 on:
   push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 permissions:
   issues: write
@@ -38,6 +41,9 @@ jobs:
     - name: Prettier format check
       run: npm run format:check
 
+    - name: Validate retailers
+      run: npm run validate-retailers
+
     - name: Run tests
       run: npm test
 
@@ -57,4 +63,14 @@ jobs:
       run: |
         zip -r ./extension.zip dist/
         gh release upload ${{ steps.release.outputs.tag_name }} ./extension.zip
+
+    - name: Publish to Chrome Web Store
+      if: ${{ steps.release.outputs.release_created }}
+      uses: puzzlers-labs/chrome-webstore-publish@v1
+      with:
+        extension_id: ${{ vars.CHROME_EXTENSION_ID }}
+        zip_file_path: ./extension.zip
+        client_id: ${{ secrets.GOOGLE_CLIENT_ID }}
+        client_secret: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+        refresh_token: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
 
