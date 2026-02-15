@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.0](https://github.com/anthonyangel/next-price-checker/compare/v1.0.2...v1.1.0) (2026-02-15)
+
+
+### Features
+
+* add vitest test infrastructure, unit tests, and fix stale price selector ([efc21a3](https://github.com/anthonyangel/next-price-checker/commit/efc21a38ebf7beeeab9830a620bba4c216a9c272))
+* retailer abstraction, Bloomreach provider, CD pipeline, rename to Price Checker ([94f5c8d](https://github.com/anthonyangel/next-price-checker/commit/94f5c8d4f1bf004e17211d8fc14a5c812a5dd93c))
+
 ## [1.0.2](https://github.com/anthonyangel/next-price-checker/compare/v1.0.1...v1.0.2) (2025-06-10)
 
 
