@@ -123,7 +123,7 @@ describe('NextRetailer', () => {
 
   describe('selectors', () => {
     it('has a price selector', () => {
-      expect(next.priceSelector).toBe('#pdp-item-title .MuiTypography-h1 span');
+      expect(next.priceSelector).toBe('[data-testid="product-now-price"] span:last-child');
     });
 
     it('has product container selectors', () => {

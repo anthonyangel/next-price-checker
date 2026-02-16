@@ -7,6 +7,7 @@ import {
   lookupPrice as bloomreachLookup,
   type BloomreachRegionConfig,
 } from '../../providers/bloomreach';
+import { scrapeProductPagePrice } from '../../providers/nextPageScraper';
 
 export class NextRetailer extends AbstractRetailer {
   readonly id = 'next';
@@ -27,7 +28,7 @@ export class NextRetailer extends AbstractRetailer {
   readonly supportsProductPage = true;
   readonly supportsCatalogPage = true;
 
-  readonly priceSelector = '#pdp-item-title .MuiTypography-h1 span';
+  readonly priceSelector = '[data-testid="product-now-price"] span:last-child';
 
   readonly productContainerSelector =
     '#plp > div.MuiGrid-root.MuiGrid-container.plp-13gwbx > div.MuiGrid-root.MuiGrid-container.plp-product-grid-wrapper.plp-wq7tal > div';
@@ -39,10 +40,12 @@ export class NextRetailer extends AbstractRetailer {
 
   /**
    * Catalog page price fallbacks — the PDP priceSelector doesn't match
-   * product cards on listing pages. Try common price selectors first,
-   * then fall back to any <span> (which typically contains the price text).
+   * product cards on listing pages. Sale cards use a <div> with
+   * data-testid="product_summary_sale_price" for the current price.
    */
   override readonly catalogPriceFallbackSelectors = [
+    '[data-testid="product_summary_sale_price"]',
+    '[data-testid="product-now-price"]',
     '.product-price',
     '[data-testid="price"]',
     'span',
@@ -65,6 +68,42 @@ export class NextRetailer extends AbstractRetailer {
   };
 
   /**
+   * Fallback price extraction from the current page DOM.
+   * Handles sale pages where the primary selector may not match,
+   * and falls back to JSON-LD structured data.
+   */
+  override extractPriceFromPage(_url: URL): string | null {
+    // Try legacy non-sale selector
+    const legacyEl = document.querySelector(
+      '#pdp-item-title .MuiTypography-h1 span'
+    ) as HTMLElement | null;
+    if (legacyEl?.textContent) {
+      const text = legacyEl.textContent.trim();
+      if (/[\d.]/.test(text)) return text;
+    }
+
+    // Try JSON-LD structured data from DOM
+    const scripts = Array.from(document.querySelectorAll('script[type="application/ld+json"]'));
+    for (const script of scripts) {
+      try {
+        const data = JSON.parse(script.textContent ?? '');
+        if (data?.['@type'] === 'Product' && data?.offers) {
+          const offers = Array.isArray(data.offers) ? data.offers[0] : data.offers;
+          const price = offers?.price;
+          if (price !== undefined && price !== null) {
+            const num = parseFloat(String(price));
+            if (!isNaN(num) && num > 0) return String(num);
+          }
+        }
+      } catch {
+        // Invalid JSON, skip
+      }
+    }
+
+    return null;
+  }
+
+  /**
    * Extract product ID (PID) from a Next product URL.
    * URL format: /style/{styleCode}/{pid} or /en/style/{styleCode}/{pid}
    */
@@ -73,10 +112,20 @@ export class NextRetailer extends AbstractRetailer {
     return match ? match[1] : null;
   }
 
-  async lookupPrice(pid: string, regionId: string): Promise<number | null> {
+  async lookupPrice(pid: string, regionId: string, productUrl?: string): Promise<number | null> {
     const config = this.bloomreachConfigs[regionId];
     if (!config) return null;
-    return bloomreachLookup(pid, config);
+
+    const price = await bloomreachLookup(pid, config);
+    if (price !== null) return price;
+
+    // Fallback: Bloomreach doesn't index all products (e.g. sale/clearance items).
+    // Try fetching the product page directly and parsing structured data.
+    if (productUrl) {
+      return scrapeProductPagePrice(productUrl);
+    }
+
+    return null;
   }
 
   transformUrl(url: URL, fromRegion: string, toRegion: string): string {
