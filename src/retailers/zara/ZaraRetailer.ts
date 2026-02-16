@@ -7,7 +7,6 @@
 
 import { AbstractRetailer, type RetailerSite } from '../../core/AbstractRetailer';
 import { lookupPrice as zaraLookupPrice, lookupCatalogPrices } from '../../providers/zara';
-import { log } from '../../logger';
 
 export class ZaraRetailer extends AbstractRetailer {
   readonly id = 'zara';
@@ -28,6 +27,9 @@ export class ZaraRetailer extends AbstractRetailer {
 
   readonly supportsProductPage = true;
   readonly supportsCatalogPage = true;
+
+  /** Zara's slug-less constructed URLs may redirect to homepage. */
+  override readonly constructedUrlsAreValid = false;
 
   readonly priceSelector = 'span.money-amount__main';
 
@@ -111,35 +113,14 @@ export class ZaraRetailer extends AbstractRetailer {
     catalogUrl?: string
   ): Promise<Record<string, number>> {
     if (catalogUrl) {
-      log(`[zara] Fetching alternate catalog page: ${catalogUrl}`);
-      const catalogPrices = await lookupCatalogPrices(catalogUrl);
-
-      // Return only prices for requested PIDs
-      const results: Record<string, number> = {};
-      const unmatchedPids: string[] = [];
-      for (const pid of pids) {
-        if (catalogPrices[pid] !== undefined) {
-          results[pid] = catalogPrices[pid];
-        } else {
-          unmatchedPids.push(pid);
-        }
-      }
-
-      log(`[zara] Catalog matched ${Object.keys(results).length}/${pids.length} requested PIDs`);
-
-      // Fall back to individual product page lookups for unmatched PIDs
-      if (unmatchedPids.length > 0) {
-        log(
-          `[zara] Falling back to individual lookups for ${unmatchedPids.length} unmatched PIDs: ${unmatchedPids.join(', ')}`
-        );
-        const fallback = await super.lookupPrices(unmatchedPids, regionId, pidToUrl);
-        Object.assign(results, fallback);
-      }
-
-      return results;
+      return this.lookupPricesWithCatalog(
+        pids,
+        regionId,
+        catalogUrl,
+        lookupCatalogPrices,
+        pidToUrl
+      );
     }
-
-    // No catalog URL — fall back to individual lookups
     return super.lookupPrices(pids, regionId, pidToUrl);
   }
 
