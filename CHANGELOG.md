@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.0](https://github.com/anthonyangel/next-price-checker/compare/v1.1.2...v1.2.0) (2026-02-16)
+
+
+### Features
+
+* add H&M retailer support (UK + Israel) ([#41](https://github.com/anthonyangel/next-price-checker/issues/41)) ([552d584](https://github.com/anthonyangel/next-price-checker/commit/552d58434a03554530c1c487f04ab387294dea9c))
+* add Zara retailer support (UK + Israel) ([#39](https://github.com/anthonyangel/next-price-checker/issues/39)) ([4212013](https://github.com/anthonyangel/next-price-checker/commit/4212013d6df3c51f9db41d4a73e024158b8b2dd3))
+
 ## [1.1.2](https://github.com/anthonyangel/next-price-checker/compare/v1.1.1...v1.1.2) (2026-02-15)
 
 
