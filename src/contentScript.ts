@@ -28,6 +28,11 @@ function productDomId(link: string): string {
     .replace(/[/+]/g, '_');
 }
 
+/** Check if an element's text looks like a struck-through original price (e.g. "Was ₪133"). */
+function isOriginalPrice(el: HTMLElement): boolean {
+  return /^was\b/i.test(el.textContent?.trim() ?? '');
+}
+
 /** Look up the price element within a product div using retailer selectors. */
 function findPriceEl(
   div: HTMLElement,
@@ -35,9 +40,17 @@ function findPriceEl(
   fallbacks: string[]
 ): HTMLElement | null {
   let el = div.querySelector(priceSelector) as HTMLElement | null;
+  if (el && isOriginalPrice(el)) el = null;
   if (!el) {
     for (const sel of fallbacks) {
-      el = div.querySelector(sel) as HTMLElement | null;
+      // querySelectorAll so we can skip "Was" price elements
+      for (const candidate of Array.from(div.querySelectorAll(sel))) {
+        const text = (candidate as HTMLElement).textContent?.trim() ?? '';
+        if (text && /\d/.test(text) && !isOriginalPrice(candidate as HTMLElement)) {
+          el = candidate as HTMLElement;
+          break;
+        }
+      }
       if (el) break;
     }
   }
@@ -85,9 +98,18 @@ async function scanPage() {
       products = productDivs.map((div) => {
         const anchor = div.querySelector('a[href]') as HTMLAnchorElement | null;
         let priceEl = div.querySelector(retailer.priceSelector) as HTMLElement | null;
+        // Skip if main selector matched a "Was" (original) price on sale items
+        if (priceEl && isOriginalPrice(priceEl)) priceEl = null;
         if (!priceEl) {
           for (const sel of retailer.catalogPriceFallbackSelectors) {
-            priceEl = div.querySelector(sel) as HTMLElement | null;
+            // querySelectorAll so we can skip "Was" price elements
+            for (const candidate of Array.from(div.querySelectorAll(sel))) {
+              const text = (candidate as HTMLElement).textContent?.trim() ?? '';
+              if (text && /\d/.test(text) && !isOriginalPrice(candidate as HTMLElement)) {
+                priceEl = candidate as HTMLElement;
+                break;
+              }
+            }
             if (priceEl) break;
           }
         }
@@ -98,13 +120,15 @@ async function scanPage() {
     } else {
       log(`[content_script] No product container found, trying single-product extraction`);
       const priceEl = document.querySelector(retailer.priceSelector) as HTMLElement | null;
-      if (priceEl && priceEl.textContent) {
-        log(`[content_script] Found price via CSS selector: ${priceEl.textContent.trim()}`);
-        products = [{ link: window.location.href, price: priceEl.textContent.trim() }];
+      const priceText = priceEl?.textContent?.trim() ?? '';
+      // Validate: price text must contain at least one digit to be a real price
+      if (priceText && /\d/.test(priceText)) {
+        log(`[content_script] Found price via CSS selector: ${priceText}`);
+        products = [{ link: window.location.href, price: priceText }];
       } else {
-        // Fallback: try structured data extraction (e.g. __NEXT_DATA__ for Next.js retailers)
+        // Fallback: try structured data extraction (e.g. JSON-LD, __NEXT_DATA__)
         log(
-          `[content_script] CSS selector "${retailer.priceSelector}" missed, trying extractPriceFromPage`
+          `[content_script] CSS selector "${retailer.priceSelector}" ${priceText ? `returned "${priceText}" (no digits)` : 'missed'}, trying extractPriceFromPage`
         );
         const fallbackPrice = retailer.extractPriceFromPage(pageUrl);
         if (fallbackPrice) {
@@ -256,6 +280,9 @@ async function scanPage() {
       if (uncachedUrls.length > 0) {
         log(`[content_script] Bulk API fetch: ${uncachedUrls.length} products`);
 
+        // Track items the API couldn't find for content-script fallback
+        const apiMissedItems: typeof productMeta = [];
+
         try {
           const catalogResp: Record<string, { price: number }> = await chrome.runtime.sendMessage({
             action: 'getAlternateCatalogPrices',
@@ -297,20 +324,91 @@ async function scanPage() {
                 respPriceEl
               );
             } else if (uncachedUrls.includes(meta.altUrl)) {
-              // No result from API — product not found
-              renderAndInjectVerdict(
-                meta.product,
-                meta.compareId,
-                productDiv,
-                {},
-                siteMeta,
-                buyLink,
-                respPriceEl
-              );
+              // API miss — collect for content-script fallback fetch
+              apiMissedItems.push(meta);
             }
           }
         } catch (e) {
           warn('[content_script] Bulk catalog fetch failed:', e);
+        }
+
+        // Tab-based fallback: for items the API missed (e.g. sale/clearance
+        // items not in Bloomreach), ask the background to open a browser tab
+        // on the alternate domain and scrape prices via same-origin fetch.
+        // This bypasses both CORS (content script limitation) and bot protection
+        // (service worker limitation) since it's a real browser context.
+        if (apiMissedItems.length > 0 && urlsAreValid) {
+          log(
+            `[content_script] API missed ${apiMissedItems.length} products, trying tab-based scrape`
+          );
+          const missedUrls = apiMissedItems
+            .map((m) => m.altUrl)
+            .filter((u): u is string => u != null);
+
+          try {
+            const tabResp: Record<string, number | null> =
+              await chrome.runtime.sendMessage({
+                action: 'scrapeViaTab',
+                urls: missedUrls,
+              });
+
+            for (const meta of apiMissedItems) {
+              if (!meta.altUrl) continue;
+              const price = tabResp?.[meta.altUrl] ?? null;
+              const productDiv = container.children[meta.idx] as HTMLElement | undefined;
+              if (!productDiv) continue;
+              const buyLink = !urlsAreValid && altCatalogUrl ? altCatalogUrl : meta.altUrl;
+              const fbPriceEl = findPriceEl(
+                productDiv,
+                retailer.priceSelector,
+                retailer.catalogPriceFallbackSelectors
+              );
+
+              if (price !== null) {
+                if (meta.pid && altRegionId) {
+                  setCachedPrice(retailer.id, meta.pid, altRegionId, price);
+                  resolvedAltPrices.set(meta.pid, price);
+                }
+                renderAndInjectVerdict(
+                  meta.product,
+                  meta.compareId,
+                  productDiv,
+                  { price },
+                  siteMeta,
+                  buyLink,
+                  fbPriceEl
+                );
+              } else {
+                renderAndInjectVerdict(
+                  meta.product,
+                  meta.compareId,
+                  productDiv,
+                  {},
+                  siteMeta,
+                  buyLink,
+                  fbPriceEl
+                );
+              }
+            }
+          } catch (e) {
+            warn('[content_script] Tab-based scrape failed:', e);
+            // Render "not found" for all missed items
+            for (const meta of apiMissedItems) {
+              if (!meta.altUrl) continue;
+              const productDiv = container.children[meta.idx] as HTMLElement | undefined;
+              if (!productDiv) continue;
+              const buyLink = !urlsAreValid && altCatalogUrl ? altCatalogUrl : meta.altUrl;
+              const fbPriceEl = findPriceEl(
+                productDiv,
+                retailer.priceSelector,
+                retailer.catalogPriceFallbackSelectors
+              );
+              renderAndInjectVerdict(
+                meta.product, meta.compareId, productDiv, {},
+                siteMeta, buyLink, fbPriceEl
+              );
+            }
+          }
         }
       }
 
