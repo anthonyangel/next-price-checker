@@ -1,9 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Price Checker",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "Compare product prices between UK and Israel retail websites",
-  "permissions": ["activeTab", "scripting", "storage"],
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
   "host_permissions": [
     "https://www.next.co.uk/*",
     "https://www.next.co.il/*",
