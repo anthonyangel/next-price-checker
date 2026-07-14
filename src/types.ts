@@ -50,6 +50,16 @@ export interface AlternateCatalogMessage {
 }
 
 /**
+ * Message sent to scrape product pages via a real browser tab.
+ * Used when Bloomreach misses sale/clearance items and the service worker
+ * fetch is blocked by bot protection.
+ */
+export interface ScrapeViaTabMessage {
+  action: 'scrapeViaTab';
+  urls: string[];
+}
+
+/**
  * Summary of catalog price comparisons, sent from content script to popup.
  */
 export interface CatalogSavingItem {
