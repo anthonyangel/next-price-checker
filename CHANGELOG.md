@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/anthonyangel/next-price-checker/compare/v1.2.0...v1.2.1) (2026-07-14)
+
+
+### Bug Fixes
+
+* handle Next sale/clearance pages missing from Bloomreach API ([#42](https://github.com/anthonyangel/next-price-checker/issues/42)) ([a2b6e55](https://github.com/anthonyangel/next-price-checker/commit/a2b6e55d8cc10c43f9ba7a988dc5b6549fc87b5d))
+
 ## [1.2.0](https://github.com/anthonyangel/next-price-checker/compare/v1.1.2...v1.2.0) (2026-02-16)
 
 
