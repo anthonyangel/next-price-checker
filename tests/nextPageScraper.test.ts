@@ -119,6 +119,48 @@ describe('scrapeProductPagePrice', () => {
       mockFetch.mockResolvedValue(htmlResponse(html));
       expect(await scrapeProductPagePrice('https://www.next.co.uk/style/abc/123')).toBe(55.0);
     });
+
+    // Fixture captured live from a real next.co.uk clearance product page
+    // (style/su809646/w87938, 2026-07-14). Unlike the idealized fixtures
+    // above, Next's actual react-query dehydrated state nests the price
+    // under dehydratedState.queries[].state.data, formats the current price
+    // as a currency-prefixed string ("£32"), and stores the sale/regular
+    // pair as { salePrice: { minPrice, maxPrice }, price: { minPrice, maxPrice } }
+    // range objects rather than flat numbers.
+    it('extracts price from real next.co.uk dehydratedState shape', async () => {
+      const nextData = {
+        props: {
+          pageProps: {
+            dehydratedState: {
+              queries: [
+                { queryKey: ['uxfabric', 'v3'], state: { data: {} } },
+                {
+                  queryKey: ['product', 'w87938'],
+                  state: {
+                    data: {
+                      price: '£32',
+                      priceData: {
+                        salePrice: { minPrice: 32, maxPrice: 32 },
+                        price: { minPrice: 65, maxPrice: 65 },
+                      },
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        },
+      };
+      const html = `
+        <html><head>
+        <script id="__NEXT_DATA__" type="application/json">${JSON.stringify(nextData)}</script>
+        </head><body>${'x'.repeat(1000)}</body></html>
+      `;
+      mockFetch.mockResolvedValue(htmlResponse(html));
+      expect(await scrapeProductPagePrice('https://www.next.co.uk/style/su809646/w87938')).toBe(
+        32
+      );
+    });
   });
 
   describe('meta tag extraction', () => {
