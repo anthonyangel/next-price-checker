@@ -8,11 +8,7 @@
 
 import { log, warn, error } from './logger';
 import { getRetailerAndRegion } from './core/registry';
-import type {
-  AlternatePriceMessage,
-  AlternateCatalogMessage,
-  ScrapeViaTabMessage,
-} from './types';
+import type { AlternatePriceMessage, AlternateCatalogMessage, ScrapeViaTabMessage } from './types';
 
 log('[background.ts] loaded');
 
@@ -194,11 +190,11 @@ chrome.runtime.onMessage.addListener(
           // Inject a self-contained script that:
           // 1. Extracts the first price from the loaded page's DOM
           // 2. Fetches remaining URLs same-origin with delays
-          const execResults = await (chrome.scripting.executeScript as Function)({
+          const execResults = (await (chrome.scripting.executeScript as Function)({
             target: { tabId },
             func: injectedFetchAndParsePrices,
             args: [urls],
-          }) as Array<{ result: Record<string, number | null> }>;
+          })) as Array<{ result: Record<string, number | null> }>;
 
           const scraped = execResults?.[0]?.result;
           if (scraped) {
@@ -233,10 +229,7 @@ function waitForTabComplete(tabId: number, timeoutMs: number): Promise<void> {
       reject(new Error(`Tab ${tabId} load timed out after ${timeoutMs}ms`));
     }, timeoutMs);
 
-    function listener(
-      updatedTabId: number,
-      changeInfo: { status?: string }
-    ) {
+    function listener(updatedTabId: number, changeInfo: { status?: string }) {
       if (updatedTabId === tabId && changeInfo.status === 'complete') {
         clearTimeout(timer);
         chrome.tabs.onUpdated.removeListener(listener);
@@ -263,7 +256,7 @@ function waitForTabComplete(tabId: number, timeoutMs: number): Promise<void> {
  */
 async function isTabBlocked(tabId: number): Promise<boolean> {
   try {
-    const results = await (chrome.scripting.executeScript as Function)({
+    const results = (await (chrome.scripting.executeScript as Function)({
       target: { tabId },
       func: () => {
         const title = document.title.toLowerCase();
@@ -274,7 +267,7 @@ async function isTabBlocked(tabId: number): Promise<boolean> {
           body.includes("don't have permission")
         );
       },
-    }) as Array<{ result: boolean }>;
+    })) as Array<{ result: boolean }>;
     return results?.[0]?.result ?? false;
   } catch {
     return false;
@@ -286,27 +279,21 @@ async function isTabBlocked(tabId: number): Promise<boolean> {
  * Fetches each product URL same-origin and extracts the price from JSON-LD.
  * Must be self-contained — cannot reference external modules.
  */
-async function injectedFetchAndParsePrices(
-  urls: string[]
-): Promise<Record<string, number | null>> {
+async function injectedFetchAndParsePrices(urls: string[]): Promise<Record<string, number | null>> {
   const results: Record<string, number | null> = {};
 
   /** Extract JSON-LD Product price from raw HTML string. */
   function extractJsonLdPrice(html: string): number | null {
-    const jsonLdRe =
-      /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+    const jsonLdRe = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
     let m;
     while ((m = jsonLdRe.exec(html)) !== null) {
       try {
         const data = JSON.parse(m[1]);
         if (data?.['@type'] === 'Product' && data?.offers) {
-          const offers = Array.isArray(data.offers)
-            ? data.offers[0]
-            : data.offers;
+          const offers = Array.isArray(data.offers) ? data.offers[0] : data.offers;
           const raw = offers?.lowPrice ?? offers?.price;
           if (raw !== undefined && raw !== null) {
-            const num =
-              typeof raw === 'number' ? raw : parseFloat(String(raw));
+            const num = typeof raw === 'number' ? raw : parseFloat(String(raw));
             if (!isNaN(num) && num > 0) return num;
           }
         }
@@ -325,20 +312,15 @@ async function injectedFetchAndParsePrices(
       const currentPath = window.location.pathname;
       const targetPath = new URL(firstUrl).pathname;
       if (currentPath === targetPath) {
-        const scripts = document.querySelectorAll(
-          'script[type="application/ld+json"]'
-        );
+        const scripts = document.querySelectorAll('script[type="application/ld+json"]');
         for (const script of Array.from(scripts)) {
           try {
             const data = JSON.parse(script.textContent ?? '');
             if (data?.['@type'] === 'Product' && data?.offers) {
-              const offers = Array.isArray(data.offers)
-                ? data.offers[0]
-                : data.offers;
+              const offers = Array.isArray(data.offers) ? data.offers[0] : data.offers;
               const raw = offers?.lowPrice ?? offers?.price;
               if (raw !== undefined && raw !== null) {
-                const num =
-                  typeof raw === 'number' ? raw : parseFloat(String(raw));
+                const num = typeof raw === 'number' ? raw : parseFloat(String(raw));
                 if (!isNaN(num) && num > 0) {
                   results[firstUrl] = num;
                   break;

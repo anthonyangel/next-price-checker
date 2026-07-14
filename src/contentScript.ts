@@ -346,11 +346,10 @@ async function scanPage() {
             .filter((u): u is string => u != null);
 
           try {
-            const tabResp: Record<string, number | null> =
-              await chrome.runtime.sendMessage({
-                action: 'scrapeViaTab',
-                urls: missedUrls,
-              });
+            const tabResp: Record<string, number | null> = await chrome.runtime.sendMessage({
+              action: 'scrapeViaTab',
+              urls: missedUrls,
+            });
 
             for (const meta of apiMissedItems) {
               if (!meta.altUrl) continue;
@@ -404,8 +403,13 @@ async function scanPage() {
                 retailer.catalogPriceFallbackSelectors
               );
               renderAndInjectVerdict(
-                meta.product, meta.compareId, productDiv, {},
-                siteMeta, buyLink, fbPriceEl
+                meta.product,
+                meta.compareId,
+                productDiv,
+                {},
+                siteMeta,
+                buyLink,
+                fbPriceEl
               );
             }
           }

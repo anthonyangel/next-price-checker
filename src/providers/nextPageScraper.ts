@@ -65,7 +65,8 @@ export async function scrapeProductPagePrice(productUrl: string): Promise<number
 /** Extract price from JSON-LD Product schema. */
 function extractFromJsonLd(html: string): number | null {
   // Match all <script type="application/ld+json"> blocks
-  const jsonLdPattern = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  const jsonLdPattern =
+    /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
   let match;
   while ((match = jsonLdPattern.exec(html)) !== null) {
     try {
