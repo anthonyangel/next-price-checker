@@ -2,6 +2,8 @@
 
 A Chrome extension that compares product prices between UK and Israel versions of retail websites. It fetches alternate site prices, converts currencies, and injects a verdict and link for each product, helping you find the best deal.
 
+[**Install from the Chrome Web Store**](https://chromewebstore.google.com/detail/price-checker/hhochdjoooaaemniegbdgifadnbooghh)
+
 ## Supported Retailers
 
 | Retailer | UK | Israel | Lookup method |
@@ -18,6 +20,10 @@ A Chrome extension that compares product prices between UK and Israel versions o
 - Catalog page summary with "cheaper here" filtering.
 - Handles infinite scroll and dynamically loaded products.
 - Persistent price cache to reduce repeat lookups.
+
+## Installation
+
+Install directly from the [Chrome Web Store](https://chromewebstore.google.com/detail/price-checker/hhochdjoooaaemniegbdgifadnbooghh).
 
 ## Installation (Development)
 1. Clone this repository.
