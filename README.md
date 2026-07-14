@@ -19,6 +19,9 @@ A Chrome extension that compares product prices between UK and Israel versions o
 - Handles infinite scroll and dynamically loaded products.
 - Persistent price cache to reduce repeat lookups.
 
+### How alternate prices are fetched
+Most lookups happen quietly via a background service worker (API calls or same-origin page fetches) — no visible browser activity. For Next sale/clearance items that neither the price API nor a direct fetch can resolve (usually because the retailer's bot protection blocks it), the extension falls back to briefly opening an unfocused background tab on the alternate site to fetch prices the way a real browser would. When this fallback runs, the popup shows a "Checking via a background tab..." notice so it's never a silent side effect.
+
 ## Installation (Development)
 1. Clone this repository.
 2. Run `npm install` to install dependencies.

@@ -345,6 +345,13 @@ async function scanPage() {
             .map((m) => m.altUrl)
             .filter((u): u is string => u != null);
 
+          // Let the popup (if open) disclose that a background tab is about
+          // to visit the alternate site — this isn't a silent side effect.
+          chrome.runtime.sendMessage({
+            action: 'npcTabScrapeStatus',
+            count: missedUrls.length,
+          });
+
           try {
             const tabResp: Record<string, number | null> = await chrome.runtime.sendMessage({
               action: 'scrapeViaTab',
