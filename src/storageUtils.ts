@@ -85,9 +85,11 @@ export async function setCachedPrice(
     await setToStorage(key, existing);
     log(`[storageUtils] Cache WRITE for ${pid.toUpperCase()}:${regionId} → ${price}`);
   });
-  writeLocks.set(
-    key,
-    op.catch(() => {})
-  );
+  const tracked = op.catch(() => {});
+  writeLocks.set(key, tracked);
+  // Evict once settled, but only if no newer write has chained onto this key since.
+  tracked.finally(() => {
+    if (writeLocks.get(key) === tracked) writeLocks.delete(key);
+  });
   await op;
 }
