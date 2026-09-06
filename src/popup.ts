@@ -67,6 +67,19 @@ chrome.runtime.onMessage.addListener((msg, _sender, _sendResponse) => {
     if (statusEl) renderCatalogSummary(statusEl, msg.summary);
     return false;
   }
+
+  // Discloses that a background tab is about to visit the alternate site to
+  // recover prices the API missed (e.g. sale/clearance items) — see
+  // background.ts's scrapeViaTab. Superseded by npcCatalogSummary once done.
+  if (msg.action === 'npcTabScrapeStatus') {
+    const statusEl = document.getElementById('status');
+    if (statusEl) {
+      statusEl.innerHTML =
+        `🔎 Checking <strong>${msg.count} item(s)</strong> via a background tab on the alternate site...<br>` +
+        '<span style="color:#888">(bypasses bot protection that blocks direct requests)</span>';
+    }
+    return false;
+  }
 });
 
 async function main() {
