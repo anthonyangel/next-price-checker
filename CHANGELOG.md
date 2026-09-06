@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.3.0](https://github.com/anthonyangel/next-price-checker/compare/v1.2.1...v1.3.0) (2026-09-06)
+
+
+### Features
+
+* add Mango retailer support (UK + Israel) ([#52](https://github.com/anthonyangel/next-price-checker/issues/52)) ([554dfbd](https://github.com/anthonyangel/next-price-checker/commit/554dfbd130d2183b8f1cc75cc71cad35566276cb))
+
+
+### Bug Fixes
+
+* three correctness/privacy/leak issues found in code review ([#50](https://github.com/anthonyangel/next-price-checker/issues/50)) ([09998ad](https://github.com/anthonyangel/next-price-checker/commit/09998ada3788f00afed69e0676598dee2d0b342a))
+
 ## [1.2.1](https://github.com/anthonyangel/next-price-checker/compare/v1.2.0...v1.2.1) (2026-07-14)
 
 
