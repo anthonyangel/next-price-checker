@@ -151,6 +151,27 @@ function extractFromNextData(html: string): number | null {
   }
 }
 
+/**
+ * Coerce a price-field value to a number. Handles the shapes actually seen
+ * in the wild: plain numbers, currency-prefixed strings (e.g. "£32"), and
+ * { minPrice, maxPrice } range objects (Next's dehydrated react-query data
+ * stores prices this way — plain parseFloat(String(val)) fails on both).
+ */
+function coercePriceValue(val: unknown): number | null {
+  if (typeof val === 'number') {
+    return val > 0 ? val : null;
+  }
+  if (typeof val === 'string') {
+    const num = parseFloat(val.replace(/[^\d.]/g, ''));
+    return !isNaN(num) && num > 0 ? num : null;
+  }
+  if (val && typeof val === 'object') {
+    const range = (val as Record<string, unknown>).minPrice;
+    if (typeof range === 'number' && range > 0) return range;
+  }
+  return null;
+}
+
 /** Recursively search an object for price-like fields. Max depth to avoid cycles. */
 function findPriceInObject(obj: unknown, depth: number): number | null {
   if (depth > 6 || !obj || typeof obj !== 'object') return null;
@@ -167,11 +188,8 @@ function findPriceInObject(obj: unknown, depth: number): number | null {
 
   // Look for common price field names (prefer sale/current price)
   for (const key of ['salePrice', 'sale_price', 'currentPrice', 'price', 'Price']) {
-    const val = record[key];
-    if (val !== undefined && val !== null) {
-      const num = typeof val === 'number' ? val : parseFloat(String(val));
-      if (!isNaN(num) && num > 0) return num;
-    }
+    const price = coercePriceValue(record[key]);
+    if (price !== null) return price;
   }
 
   // Recurse into nested objects (skip large arrays)

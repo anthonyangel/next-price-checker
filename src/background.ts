@@ -353,7 +353,12 @@ async function injectedFetchAndParsePrices(urls: string[]): Promise<Record<strin
     const settled = await Promise.allSettled(
       batch.map(async (url) => {
         try {
-          const resp = await fetch(url, { credentials: 'include' });
+          // Try without cookies first; only send session credentials if the
+          // site actually needs them (mirrors providers/zara.ts and hm.ts).
+          let resp = await fetch(url, { credentials: 'omit' });
+          if (resp.status === 403 || resp.status === 410) {
+            resp = await fetch(url, { credentials: 'include' });
+          }
           if (!resp.ok) return { url, price: null as number | null };
           const html = await resp.text();
           if (html.length < 500) return { url, price: null as number | null };
