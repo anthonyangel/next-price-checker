@@ -6,9 +6,15 @@ import type { AbstractRetailer } from './AbstractRetailer';
 import { NextRetailer } from '../retailers/next/NextRetailer';
 import { ZaraRetailer } from '../retailers/zara/ZaraRetailer';
 import { HMRetailer } from '../retailers/hm/HMRetailer';
+import { MangoRetailer } from '../retailers/mango/MangoRetailer';
 
 /** All registered retailers */
-const retailers: AbstractRetailer[] = [new NextRetailer(), new ZaraRetailer(), new HMRetailer()];
+const retailers: AbstractRetailer[] = [
+  new NextRetailer(),
+  new ZaraRetailer(),
+  new HMRetailer(),
+  new MangoRetailer(),
+];
 
 /**
  * Find the retailer and region for a given URL.

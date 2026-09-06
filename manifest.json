@@ -1,15 +1,22 @@
 {
   "manifest_version": 3,
   "name": "Price Checker",
-  "version": "1.1.2",
+  "version": "1.2.1",
   "description": "Compare product prices between UK and Israel retail websites",
-  "permissions": ["activeTab", "scripting", "storage"],
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
   "host_permissions": [
     "https://www.next.co.uk/*",
     "https://www.next.co.il/*",
     "https://core.dxpapi.com/*",
     "https://www.zara.com/*",
-    "https://www2.hm.com/*"
+    "https://www2.hm.com/*",
+    "https://shop.mango.com/*",
+    "https://online-orchestrator.mango.com/*",
+    "https://api.frankfurter.app/*"
   ],
   "action": {
     "default_popup": "popup.html"
