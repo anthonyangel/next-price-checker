@@ -13,7 +13,10 @@
     "https://www.next.co.il/*",
     "https://core.dxpapi.com/*",
     "https://www.zara.com/*",
-    "https://www2.hm.com/*"
+    "https://www2.hm.com/*",
+    "https://shop.mango.com/*",
+    "https://online-orchestrator.mango.com/*",
+    "https://api.frankfurter.app/*"
   ],
   "action": {
     "default_popup": "popup.html"
