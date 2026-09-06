@@ -200,12 +200,17 @@ describe('MangoRetailer', () => {
 
   describe('selectors', () => {
     it('has a price selector', () => {
-      expect(mango.priceSelector).toBe('span[class*="SinglePrice_center"]');
+      expect(mango.priceSelector).toBe('span[class*="SinglePrice_container"]');
     });
 
     it('has product container selectors', () => {
       expect(mango.productContainerSelector).toBeTruthy();
       expect(mango.productContainerFallbackSelectors.length).toBeGreaterThan(0);
+    });
+
+    it('has a catalog price fallback selector distinct from the PDP selector', () => {
+      expect(mango.catalogPriceFallbackSelectors.length).toBeGreaterThan(0);
+      expect(mango.catalogPriceFallbackSelectors).not.toContain(mango.priceSelector);
     });
   });
 

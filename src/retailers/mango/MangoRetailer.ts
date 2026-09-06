@@ -29,11 +29,21 @@ export class MangoRetailer extends AbstractRetailer {
   readonly supportsProductPage = true;
   readonly supportsCatalogPage = true;
 
-  readonly priceSelector = 'span[class*="SinglePrice_center"]';
+  readonly priceSelector = 'span[class*="SinglePrice_container"]';
 
   readonly productContainerSelector = 'form[class*="ProductCard_productCard"]';
 
   readonly productContainerFallbackSelectors = ['[class*="ProductCard"]'];
+
+  /**
+   * Catalog page price fallback. Product cards use a different price
+   * wrapper class than the PDP (`Price_container` vs `SinglePrice_container`).
+   * `meta[itemprop="price"]` would be more stable, but the content script's
+   * catalog-scan path reads `textContent` (not attributes), which is always
+   * empty for a `<meta>` element — so extractPriceFromPage's microdata
+   * lookup only helps on single-product pages, not catalog scans.
+   */
+  override readonly catalogPriceFallbackSelectors = ['div[class*="Price_container"]'];
 
   /**
    * Extract the 8-digit product ID from a Mango product URL.
