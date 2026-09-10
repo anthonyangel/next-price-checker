@@ -117,6 +117,12 @@ chrome.runtime.onMessage.addListener(
 
     /**
      * Single product lookup via API.
+     *
+     * Falls back to a tab-based scrape (same mechanism catalog pages use)
+     * when the API misses the product and a direct fetch is blocked by
+     * bot protection — otherwise single-product pages report "not found"
+     * for anything the API doesn't index (e.g. sale/clearance items),
+     * even though a real browser tab can see the price fine.
      */
     if (msg.action === 'getAlternatePrice') {
       (async () => {
@@ -132,7 +138,17 @@ chrome.runtime.onMessage.addListener(
 
           const { retailer, regionId, pid } = resolved;
           const price = await retailer.lookupPrice(pid, regionId, url);
-          (sendResponse as (r?: unknown) => void)({ price });
+          if (price !== null) {
+            (sendResponse as (r?: unknown) => void)({ price });
+            return;
+          }
+
+          log(`[background] API miss for ${url}, trying tab-based scrape`);
+          // Let the popup (if open) disclose that a background tab is about
+          // to visit the alternate site — this isn't a silent side effect.
+          chrome.runtime.sendMessage({ action: 'npcTabScrapeStatus', count: 1 }).catch(() => {});
+          const tabResults = await scrapeUrlsViaTab([url]);
+          (sendResponse as (r?: unknown) => void)({ price: tabResults[url] ?? null });
         } catch (err) {
           error('[background] Error in getAlternatePrice:', err);
           (sendResponse as (r?: unknown) => void)({
@@ -155,68 +171,80 @@ chrome.runtime.onMessage.addListener(
     if (msg.action === 'scrapeViaTab') {
       (async () => {
         const { urls } = msg;
-        const results: Record<string, number | null> = {};
-        if (!urls || urls.length === 0) {
-          (sendResponse as (r?: unknown) => void)(results);
-          return;
-        }
-
-        let tabId: number | undefined;
-        try {
-          // Navigate to the first product URL directly — this is more
-          // natural than the domain root and less likely to trigger bot
-          // protection. It also lets us extract the first price from DOM.
-          const firstUrl = urls[0];
-          const tab = await chrome.tabs.create({ url: firstUrl, active: false });
-          tabId = tab.id;
-          if (!tabId) throw new Error('Failed to create tab');
-
-          log(`[background] Tab scraper: created tab ${tabId} → ${firstUrl}`);
-
-          // Wait for tab to finish loading — allow extra time for Akamai
-          // JS challenges that redirect after solving.
-          await waitForTabComplete(tabId, 20_000);
-
-          // Detect Akamai "Access Denied" blocks before scraping
-          const blocked = await isTabBlocked(tabId);
-          if (blocked) {
-            warn('[background] Tab scraper: bot protection blocked navigation, aborting');
-            (sendResponse as (r?: unknown) => void)(results);
-            return;
-          }
-
-          log(`[background] Tab scraper: tab loaded, scraping ${urls.length} URLs`);
-
-          // Inject a self-contained script that:
-          // 1. Extracts the first price from the loaded page's DOM
-          // 2. Fetches remaining URLs same-origin with delays
-          const execResults = (await (chrome.scripting.executeScript as Function)({
-            target: { tabId },
-            func: injectedFetchAndParsePrices,
-            args: [urls],
-          })) as Array<{ result: Record<string, number | null> }>;
-
-          const scraped = execResults?.[0]?.result;
-          if (scraped) {
-            Object.assign(results, scraped);
-          }
-
-          const found = Object.values(results).filter((v) => v !== null).length;
-          log(`[background] Tab scraper: ${found}/${urls.length} prices found`);
-        } catch (err) {
-          warn('[background] Tab scraper error:', err);
-        } finally {
-          if (tabId) {
-            chrome.tabs.remove(tabId).catch(() => {});
-          }
-        }
-
+        const results = await scrapeUrlsViaTab(urls);
         (sendResponse as (r?: unknown) => void)(results);
       })();
       return true;
     }
   }
 );
+
+/**
+ * Open a background browser tab to scrape product prices — bypasses both
+ * CORS (content script limitation) and bot protection (service worker
+ * fetch limitation) since it's a real browser context. Used both for the
+ * catalog-page bulk fallback and the single-product-page fallback.
+ */
+async function scrapeUrlsViaTab(urls: string[]): Promise<Record<string, number | null>> {
+  const results: Record<string, number | null> = {};
+  if (!urls || urls.length === 0) {
+    return results;
+  }
+
+  let tabId: number | undefined;
+  try {
+    // Navigate to the first product URL directly — this is more
+    // natural than the domain root and less likely to trigger bot
+    // protection. It also lets us extract the first price from DOM.
+    const firstUrl = urls[0];
+    const tab = await chrome.tabs.create({ url: firstUrl, active: false });
+    tabId = tab.id;
+    if (!tabId) throw new Error('Failed to create tab');
+
+    log(`[background] Tab scraper: created tab ${tabId} → ${firstUrl}`);
+
+    // Wait for the tab's first navigation to finish. Note this typically
+    // lands on Akamai's bot-check interstitial, not the real page — see
+    // waitForRealPage below.
+    await waitForTabComplete(tabId, 20_000);
+
+    // The interstitial self-resolves (background XHR → location.reload)
+    // a few seconds later; poll until real content replaces it, or bail
+    // out on a terminal block / timeout.
+    const state = await waitForRealPage(tabId, 15_000);
+    if (state !== 'ready') {
+      warn(`[background] Tab scraper: gave up waiting for real page (${state})`);
+      return results;
+    }
+
+    log(`[background] Tab scraper: tab loaded, scraping ${urls.length} URLs`);
+
+    // Inject a self-contained script that:
+    // 1. Extracts the first price from the loaded page's DOM
+    // 2. Fetches remaining URLs same-origin with delays
+    const execResults = (await (chrome.scripting.executeScript as Function)({
+      target: { tabId },
+      func: injectedFetchAndParsePrices,
+      args: [urls],
+    })) as Array<{ result: Record<string, number | null> }>;
+
+    const scraped = execResults?.[0]?.result;
+    if (scraped) {
+      Object.assign(results, scraped);
+    }
+
+    const found = Object.values(results).filter((v) => v !== null).length;
+    log(`[background] Tab scraper: ${found}/${urls.length} prices found`);
+  } catch (err) {
+    warn('[background] Tab scraper error:', err);
+  } finally {
+    if (tabId) {
+      chrome.tabs.remove(tabId).catch(() => {});
+    }
+  }
+
+  return results;
+}
 
 /**
  * Wait for a tab to reach the "complete" loading status.
@@ -251,26 +279,53 @@ function waitForTabComplete(tabId: number, timeoutMs: number): Promise<void> {
 }
 
 /**
- * Detect if the tab landed on an Akamai/bot-protection block page.
- * Returns true if the page contains "Access Denied" indicators.
+ * Poll the tab until it's past Akamai's bot-check interstitial, or give up.
+ *
+ * Next's Akamai Bot Manager serves a JS-challenge page (HTTP 200, marked by
+ * `#sec-if-cpt-container` and an empty <title>) that self-resolves via a
+ * background XHR + `location.reload(true)` a few seconds later — Chrome's
+ * tab "complete" status fires on *this* interstitial load, not the real
+ * page, so scraping immediately after it returns nothing. Poll instead of
+ * trusting the first "complete" event.
  */
-async function isTabBlocked(tabId: number): Promise<boolean> {
+async function waitForRealPage(
+  tabId: number,
+  timeoutMs: number
+): Promise<'ready' | 'blocked' | 'timeout'> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const state = await checkTabState(tabId);
+    if (state === 'blocked') return 'blocked';
+    if (state === 'ready') return 'ready';
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return 'timeout';
+}
+
+/** Inspect the tab's current DOM: terminal block, still-challenging, or real content. */
+async function checkTabState(tabId: number): Promise<'ready' | 'blocked' | 'challenge'> {
   try {
     const results = (await (chrome.scripting.executeScript as Function)({
       target: { tabId },
       func: () => {
         const title = document.title.toLowerCase();
         const body = document.body?.innerText?.slice(0, 500).toLowerCase() ?? '';
-        return (
+        const blocked =
           title.includes('access denied') ||
           body.includes('access denied') ||
-          body.includes("don't have permission")
-        );
+          body.includes("don't have permission");
+        if (blocked) return 'blocked';
+
+        // Akamai Bot Manager's sensor/challenge interstitial — still resolving.
+        const stillChallenging =
+          !!document.getElementById('sec-if-cpt-container') ||
+          body.includes('powered and protected by');
+        return stillChallenging ? 'challenge' : 'ready';
       },
-    })) as Array<{ result: boolean }>;
-    return results?.[0]?.result ?? false;
+    })) as Array<{ result: 'ready' | 'blocked' | 'challenge' }>;
+    return results?.[0]?.result ?? 'ready';
   } catch {
-    return false;
+    return 'ready';
   }
 }
 
