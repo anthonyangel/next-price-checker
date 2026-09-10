@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/anthonyangel/next-price-checker/compare/v1.3.1...v1.4.0) (2026-09-10)
+
+
+### Features
+
+* add IKEA retailer support (UK + Israel) ([#56](https://github.com/anthonyangel/next-price-checker/issues/56)) ([155c189](https://github.com/anthonyangel/next-price-checker/commit/155c1893ef3a284461140b50b91fbed09774df7e))
+
 ## [1.3.1](https://github.com/anthonyangel/next-price-checker/compare/v1.3.0...v1.3.1) (2026-09-10)
 
 
