@@ -7,6 +7,7 @@ import { NextRetailer } from '../retailers/next/NextRetailer';
 import { ZaraRetailer } from '../retailers/zara/ZaraRetailer';
 import { HMRetailer } from '../retailers/hm/HMRetailer';
 import { MangoRetailer } from '../retailers/mango/MangoRetailer';
+import { IkeaRetailer } from '../retailers/ikea/IkeaRetailer';
 
 /** All registered retailers */
 const retailers: AbstractRetailer[] = [
@@ -14,6 +15,7 @@ const retailers: AbstractRetailer[] = [
   new ZaraRetailer(),
   new HMRetailer(),
   new MangoRetailer(),
+  new IkeaRetailer(),
 ];
 
 /**
