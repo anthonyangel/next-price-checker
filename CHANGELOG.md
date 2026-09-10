@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/anthonyangel/next-price-checker/compare/v1.3.0...v1.3.1) (2026-09-10)
+
+
+### Bug Fixes
+
+* recover Next alt-price lookups blocked by Akamai bot protection ([#54](https://github.com/anthonyangel/next-price-checker/issues/54)) ([801b466](https://github.com/anthonyangel/next-price-checker/commit/801b466b89cec28eb4ffb27ed7175a5b35885869))
+
 ## [1.3.0](https://github.com/anthonyangel/next-price-checker/compare/v1.2.1...v1.3.0) (2026-09-06)
 
 
